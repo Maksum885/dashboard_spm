@@ -140,7 +140,11 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(
 .lbl-c{font-family:var(--FC);font-size:10px;font-weight:700;color:#fff;text-shadow:0 0 16px #000,0 0 7px currentColor}
 .lbl-z{font-family:var(--M);font-size:9px;letter-spacing:4px;color:rgba(70,105,125,.35);text-transform:uppercase}
 
-
+.lbl-ext{ position:absolute; pointer-events:auto; cursor:pointer; white-space:nowrap; line-height:1.4;}
+.lbl-ext-name{ font-family:var(--M); font-size:9px; font-weight:600; color:#1a2a3a; letter-spacing:.8px; text-transform:uppercase; }
+.lbl-ext-sub{ font-family:var(--M); font-size:8px; color:#4e5f70; letter-spacing:.5px;}
+/* SVG overlay untuk garis */
+#lyr-svg{ position:fixed;inset:0; pointer-events:none; z-index:64;}
 /* ── TOOLTIP ── */
 #tip{
   position:fixed;pointer-events:none;z-index:900;
@@ -355,6 +359,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(
   </div>
 </aside>
 
+<svg id="lyr-svg"></svg>
 <div class="lyr" id="lyr"></div>
 <div id="tip"></div>
 <div class="overlay" id="overlay" onclick="closeSidebar()"></div>
@@ -470,23 +475,27 @@ scene.add(new THREE.HemisphereLight(0xc8dff5, 0x8aaccc, .80));
 
 /* ══ MATERIALS ══ */
 const ml = (h, e=0, ei=0) => new THREE.MeshLambertMaterial({color:h, emissive:e, emissiveIntensity:ei});
+const mld = (h, e=0, ei=0) => new THREE.MeshLambertMaterial({
+  color:h, emissive:e, emissiveIntensity:ei,
+  side: THREE.DoubleSide  
+});
 const mt = (h, op, e=0, ei=0) => new THREE.MeshLambertMaterial({color:h, transparent:true, opacity:op, emissive:e, emissiveIntensity:ei});
 
 const GW = () => [
-  ml(0x1a2a1e, 0x0a2010, .15),
-  ml(0x0e1812, 0x040e08, .1),
-  ml(0x223428, 0x082014, .25),
-  ml(0x050806),
-  ml(0x1e2e22, 0x061810, .18),
-  ml(0x0e1812),
+  mld(0xdde8dd),  // kanan — putih hint hijau sangat muda
+  mld(0xd0ddd0),  // kiri
+  mt(0x000000, 0),  // atas
+  mld(0x18202a),  // bawah tetap gelap
+  mld(0xdae6da),  // depan
+  mld(0xd0ddd0),  // belakang
 ];
 const RW = () => [
-  ml(0x2a1010, 0x1a0404, .15),
-  ml(0x180a0a, 0x0e0202, .1),
-  ml(0x301414, 0x1e0606, .25),
-  ml(0x060404),
-  ml(0x281212, 0x180404, .18),
-  ml(0x180a0a),
+  mld(0xf5e8e8),  // kanan — putih hint merah sangat muda
+  mld(0xd0ddd0),  // kiri
+  mt(0x000000, 0),  // atas
+  mld(0x18202a),  // bawah tetap gelap
+  mld(0xdae6da),  // depan
+  mld(0xd0ddd0),  // belakang
 ];
 const CRW_BLUE = () => [
   ml(0x0a1828, 0x041020, .35),
@@ -526,6 +535,18 @@ function addEdge(w,h,d, x,y,z, col, op=1){
     new THREE.LineBasicMaterial({color:col, transparent:op<1, opacity:op}));
   em.position.set(x,y,z);
   scene.add(em);
+}
+function addInnerColumns(x, z, w, d, h){
+  const cw = 0.04;
+  const ch = h;
+  const cy = h/2 + .22;
+  const col = ml(0x1e2a38);
+  const ox = w/2 - cw/2;
+  const oz = d/2 - cw/2;
+  addm(BOX(cw, ch, cw), col, x-ox, cy, z-oz);
+  addm(BOX(cw, ch, cw), col, x+ox, cy, z-oz);
+  addm(BOX(cw, ch, cw), col, x-ox, cy, z+oz);
+  addm(BOX(cw, ch, cw), col, x+ox, cy, z+oz);
 }
 function addDoor(bx,bz,w,d,h,face,offAlong=0){
   const DW=0.85,DH=1.40;
@@ -579,7 +600,7 @@ function building(id, x, z, w, d, h, mats, acol, doorCfg=null, winCfg=null, opts
   if(id){ body.userData.id=id; body.name=id; BODIES.push(body); }
   scene.add(body);
   const pm = Array.isArray(mats) ? mats[2] : mats;
-  addEdge(w,h,d, x,cy,z, acol, .42);
+  addEdge(w,h,d, x,cy,z, 0x4a5568, .85);
   const nh = opts.hv||0;
   const hcm = ml(new THREE.Color(acol).multiplyScalar(.3).getHex());
   for(let i=0;i<nh;i++){
@@ -645,48 +666,60 @@ addRoad(7,-3.5, 19.5,-3.5, 1);
 
 /* ══ BUILDINGS ══ */
 building('pit3',-14,-9,6.3,5.5,3.0, GW(), 0x4a8460, {face:'right',off:0}, null);
+addInnerColumns(-14, -9, 6.3, 5.5, 3.0);
 building('pit4',-14,-3.4,6.3,5.4,3.0, RW(), 0xa83848, {face:'right',off:0}, null);
+addInnerColumns(-14, -3.4, 6.3, 5.4, 3.0);
 building('cr3',-5.5,-11,4.0,2.0,2.0, CRW_BLUE(), 0x1a8fff, {face:'front',off:0.7}, {face:'front',count:2});
 building('cell5',1.8,-10,6.5,6,3.0, GW(), 0xa83848, {face:'right',off:2}, null);
+addm(BOX(6.5, .06, 6.0), ml(0xc8960c), 1.8, 3.22, -10);
 building('cell4',1.8,-3.8,6.5,6,3.0, RW(), 0xa83848,{face:'front',off:2.2}, null);
+addm(BOX(6.5, .06, 6.0), ml(0xc8960c), 1.8, 3.22, -3.8);
 building('pit1',10.8,-9,4.5,7,3.0, RW(), 0xa83848,{face:'front',off:-1.3}, null);
+addInnerColumns(10.8, -9, 4.5, 7.0, 3.0);
 building('pit2',15.5,-9,4.5,7,3.0, RW(), 0xa83848,{face:'front',off:1.3}, null);
+addInnerColumns(15.5, -9, 4.5, 7.0, 3.0);
 building('cr1',10.5,1.5,4.0,2.0,2.0, CRW_BLUE(), 0x1a8fff,{face:'front',off:0.7}, {face:'front',count:2});
 building('cr2',15.5,1.5,4.0,2.0,2.0, CRW_BLUE(), 0x1a8fff,{face:'front',off:0.7}, {face:'front',count:2});
 building('pit5',-12.3,11,5.8,6.5,3.0, GW(), 0x4a8460, null, null);
+addInnerColumns(-12.3, 11, 5.8, 6.5, 3.0);
 building('pit6',-6.2,11,5.8,6.5,3.0, GW(), 0x4a8460, null, null);
+addInnerColumns(-6.2, 11, 5.8, 6.5, 3.0);
 building('cell3',1.8,13,6.7,6.1,3.0, GW(), 0x4a8460, null, null);
+addm(BOX(6.7, .06, 6.1), ml(0xc8960c), 1.8, 3.22, 13);
 building('cell2', 8.6,13,6.7,6.1,3.0, GW(), 0x4a8460, null, null);
+addm(BOX(6.7, .06, 6.1), ml(0xc8960c), 8.6, 3.22, 13);
 building('cell1',15.5,13,6.7,6.1,3.0, GW(), 0x4a8460, null, null);
+addm(BOX(6.7, .06, 6.1), ml(0xc8960c), 15.5, 3.22, 13);
 
-/* ══ 3D LABELS ══ */
+/* ══ LABELS ══ */
 const LBLS = [
-  {id:'cr3',  p:new THREE.Vector3(-5.6,2.0,-9.5),  t:'CONTROL ROOM 3', cls:'lbl-r'},
-  {id:'cr1',  p:new THREE.Vector3(9.5,4.8,-3),      t:'CONTROL ROOM 1', cls:'lbl-r'},
-  {id:'cr2',  p:new THREE.Vector3(15,4.8,-3),       t:'CONTROL ROOM 2', cls:'lbl-r'},
-  {id:'pit3', p:new THREE.Vector3(-14,3.0,-10),     t:'TEST PIT 3',     cls:'lbl-r'},
-  {id:'pit4', p:new THREE.Vector3(-14,3.0,-4),      t:'TEST PIT 4',     cls:'lbl-r'},
-  {id:'cell5',p:new THREE.Vector3(1.5,2.7,-7.5),   t:'TEST CELL 5',    cls:'lbl-r'},
-  {id:'cell4',p:new THREE.Vector3(1.5,2.7,-1.2),   t:'TEST CELL 4',    cls:'lbl-r'},
-  {id:'pit1', p:new THREE.Vector3(9.5,2.3,-8.5),   t:'TEST PIT 1',     cls:'lbl-r'},
-  {id:'pit2', p:new THREE.Vector3(15,2.3,-8.5),    t:'TEST PIT 2',     cls:'lbl-r'},
-  {id:'pit5', p:new THREE.Vector3(-15,2.3,8.5),    t:'TEST PIT 5',     cls:'lbl-r'},
-  {id:'pit6', p:new THREE.Vector3(-9,2.3,8.5),     t:'TEST PIT 6',     cls:'lbl-r'},
-  {id:'cell3',p:new THREE.Vector3(-2,2.3,8.5),     t:'TEST CELL 3',    cls:'lbl-r'},
-  {id:'cell2',p:new THREE.Vector3(4.5,2.3,8.5),    t:'TEST CELL 2',    cls:'lbl-r'},
-  {id:'cell1',p:new THREE.Vector3(12,2.3,8.5),     t:'TEST CELL 1',    cls:'lbl-r'},
+  // by = offset vertikal titik belok dari anchor. Negatif = naik, positif = turun
+  // by:0 = siku horizontal biasa (default)
+  {id:'cr3',   anchor:new THREE.Vector3(-5.5,2.5,-11),  t:'CONTROL ROOM 3', side:'right', ox:80,  oy:-120, by:-120},
+  {id:'cr1',   anchor:new THREE.Vector3(10.5,2.5,1.5),  t:'CONTROL ROOM 1', side:'right', ox:140, oy:130,   by:0},
+  {id:'cr2',   anchor:new THREE.Vector3(15.5,2.5,1.5),  t:'CONTROL ROOM 2', side:'right', ox:60,  oy:140,   by:0},
+  {id:'pit3',  anchor:new THREE.Vector3(-14,3.2,-9),    t:'TEST PIT 3',     side:'left',  ox:-80, oy:-70,  by:-70},
+  {id:'pit4',  anchor:new THREE.Vector3(-14,3.2,-3.4),  t:'TEST PIT 4',     side:'left',  ox:-120, oy:-60,  by:-60},
+  {id:'pit5',  anchor:new THREE.Vector3(-12.3,3.2,11),  t:'TEST PIT 5',     side:'left',  ox:-110, oy:-70,    by:-70},
+  {id:'pit6',  anchor:new THREE.Vector3(-6.2,3.2,11),   t:'TEST PIT 6',     side:'left',  ox:-215, oy:-25,   by:-25},
+  {id:'cell5', anchor:new THREE.Vector3(1.8,3.2,-10),   t:'TEST CELL 5',    side:'right', ox:80,   oy:-120,  by:-120},
+  {id:'cell4', anchor:new THREE.Vector3(1.8,3.2,-3.8),  t:'TEST CELL 4',    side:'right', ox:160,   oy:-60,  by:-60},
+  {id:'pit1',  anchor:new THREE.Vector3(10.8,3.2,-9),   t:'TEST PIT 1',     side:'right', ox:90,  oy:-50,    by:-50},
+  {id:'pit2',  anchor:new THREE.Vector3(15.5,3.2,-9),   t:'TEST PIT 2',     side:'right', ox:80,  oy:-40,   by:-40},
+  {id:'cell3', anchor:new THREE.Vector3(1.8,3.2,13),    t:'TEST CELL 3',    side:'left',  ox:-70, oy:110,   by:0},
+  {id:'cell2', anchor:new THREE.Vector3(8.6,3.2,13),    t:'TEST CELL 2',    side:'left',  ox:-70,  oy:125,   by:0},
+  {id:'cell1', anchor:new THREE.Vector3(15.5,3.2,13),   t:'TEST CELL 1',    side:'right', ox:-70,   oy:130,   by:0},
 ];
 const lyrEl = document.getElementById('lyr');
+const svgEl = document.getElementById('lyr-svg');
 LBLS.forEach(lb=>{
-  const div=document.createElement('div');
-  div.className='lbl '+lb.cls;
-  div.textContent=lb.t;
-  if(lb.id){
-    div.style.cursor='pointer'; div.style.pointerEvents='auto';
-    div.addEventListener('click',()=>{ const crId=findCR(lb.id); openPanel(crId||lb.id); });
-  }
+  const div = document.createElement('div');
+  div.className = 'lbl lbl-ext';
+  div.innerHTML = `<div class="lbl-ext-name">${lb.t}</div>`;
+  div.style.opacity = '0';
+  div.addEventListener('click',()=>{ const crId=findCR(lb.id); openPanel(crId||lb.id); });
   lyrEl.appendChild(div);
-  lb.el=div;
+  lb.el = div;
 });
 
 function findCR(id){
@@ -986,6 +1019,8 @@ let T = 0;
 function animate(){
   requestAnimationFrame(animate);
   T += 0.016;
+
+  // Hover/select highlight
   BODIES.forEach(b=>{
     const isH  = hov===b.userData.id;
     const isSel= curId&&DATA[curId]&&(
@@ -1002,12 +1037,54 @@ function animate(){
       }
     });
   });
+
+  // Update label positions + SVG lines
+  const offset = 100;
+  // Update label positions + SVG lines
   LBLS.forEach(lb=>{
-    TMP.copy(lb.p).project(cam);
-    lb.el.style.left=((TMP.x*.5+.5)*innerWidth)+'px';
-    lb.el.style.top=((-.5*TMP.y+.5)*innerHeight)+'px';
-    lb.el.style.opacity=TMP.z<1?'1':'0';
+    TMP.copy(lb.anchor).project(cam);
+    if(TMP.z >= 1){ lb.el.style.opacity='0'; lb._vis=false; return; }
+    lb._vis = true;
+    lb._sx = (TMP.x*.5+.5)*innerWidth;
+    lb._sy = (-.5*TMP.y+.5)*innerHeight;
+    // Posisi label pakai ox/oy dari anchor
+    lb._lx = lb._sx + lb.ox;
+    lb._ly = lb._sy + lb.oy;
+    lb.el.style.opacity = '1';
+    lb.el.style.left = lb._lx + 'px';
+    lb.el.style.top  = lb._ly + 'px';
+    lb.el.style.transform = 'translate(-50%,-50%)';
   });
+
+  svgEl.setAttribute('width', innerWidth);
+  svgEl.setAttribute('height', innerHeight);
+  svgEl.innerHTML = LBLS.map(lb=>{
+    if(!lb._vis||!lb._sx) return '';
+    const ew = (lb.el.offsetWidth||80)/2;
+
+    // Ujung label — sisi kiri atau kanan label
+    const ex = lb._lx + (lb._sx > lb._lx ? ew : -ew);
+    const ey = lb._ly;
+
+    let points;
+    if(lb.by !== 0 && lb.by !== undefined){
+      // Naik/turun dulu secara VERTIKAL dari anchor,
+      // lalu belok HORIZONTAL ke posisi x label,
+      // lalu lurus ke ujung label
+      const midY = lb._sy + lb.by;       // titik belok vertikal
+      const midX = ex;                    // sejajar x dengan ujung label
+      points = `${lb._sx},${lb._sy} ${lb._sx},${midY} ${midX},${midY} ${ex},${ey}`;
+    } else {
+      // Siku biasa: horizontal dulu ke x label, lalu vertikal ke label
+      points = `${lb._sx},${lb._sy} ${ex},${lb._sy} ${ex},${ey}`;
+    }
+
+    return `
+      <polyline points="${points}"
+        fill="none" stroke="#2d4a6a" stroke-width="1.2" opacity="0.85"/>
+      <circle cx="${lb._sx}" cy="${lb._sy}" r="2.5" fill="#4a6080" opacity="0.85"/>
+      <circle cx="${ex}" cy="${ey}" r="1.5" fill="#4a6080" opacity="0.6"/>`;
+  }).join('');
   renderer.render(scene, cam);
 }
 animate();
