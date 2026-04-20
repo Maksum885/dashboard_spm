@@ -483,6 +483,18 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(
 
 <!-- RIGHT PANEL -->
 <div class="rpanel" id="rpanel">
+  <div id="camera-view" style="
+  width:100%;
+  height:260px;
+  background:#000;
+  display:none;
+  justify-content:center;
+  align-items:center;
+  border-radius:10px;
+  overflow:hidden;
+">
+      <video id="camera" autoplay playsinline style="width:100%;height:100%;object-fit:cover;"></video>
+  </div>
   <div class="rp-accent" id="rp-accent"></div>
   <div class="rp-hdr">
     <div class="rp-hdr-row">
@@ -1058,15 +1070,23 @@ function toggleRooms(crId){
 
 /* ══ PANEL — ROOM LANGSUNG ══ */
 function openRoomPanel(roomId, crId){
+  console.log("ROOM DIKLIK");
   const r=findRoom(roomId);
   const crD=DATA[crId];
   if(!r||!crD)return;
-  panelMode='room'; curRoomId=roomId; curId=crId;
+
+  // ✅ TARUH DI SINI
+  showCamera();
+
+  panelMode='room'; 
+  curRoomId=roomId; 
+  curId=crId;
 
   const rp=document.getElementById('rpanel');
   const col=r.col||'#059652';
   document.getElementById('rp-accent').style.background=col;
   rp.style.setProperty('--ra',col);
+
 
   // Breadcrumb
   const bc=document.getElementById('rp-breadcrumb');
@@ -1959,6 +1979,44 @@ window.addEventListener('resize',()=>{
 updateAlarmSidebar();
 updateUtilSidebar();
 buildSidebarRooms();
+
+let stream = null;
+
+async function showCamera() {
+  const camView = document.getElementById('camera-view');
+  const video = document.getElementById('camera');
+
+  // pastikan panel kamera terlihat
+  camView.style.display = "flex";
+
+  // jika kamera sudah aktif, jangan buka lagi
+  if (stream) {
+    video.srcObject = stream;
+    return;
+  }
+
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: "user" }
+    });
+
+    video.srcObject = stream;
+
+  } catch (err) {
+    console.error("Error membuka kamera:", err);
+    alert("Kamera tidak bisa diakses!");
+  }
+}
+
+function stopCamera() {
+  if (stream) {
+    stream.getTracks().forEach(t => t.stop());
+    stream = null;
+  }
+
+  document.getElementById('camera-view').style.display = "none";
+}
+
 </script>
 </body>
 </html>
