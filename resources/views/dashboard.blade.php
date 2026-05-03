@@ -485,15 +485,19 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(
 <div class="rpanel" id="rpanel">
   <div id="camera-view" style="
   width:100%;
-  height:260px;
+  height:200px; /* 🔥 kecilkan dari 260 */
   background:#000;
   display:none;
   justify-content:center;
   align-items:center;
   border-radius:10px;
   overflow:hidden;
+  margin-bottom:10px; /* 🔥 kasih jarak */
 ">
-      <video id="camera" autoplay playsinline style="width:100%;height:100%;object-fit:cover;"></video>
+  <img 
+    id="camera-stream"
+    style="width:100%; height:100%; object-fit:cover;"
+  >
   </div>
   <div class="rp-accent" id="rp-accent"></div>
   <div class="rp-hdr">
@@ -1980,41 +1984,27 @@ updateAlarmSidebar();
 updateUtilSidebar();
 buildSidebarRooms();
 
-let stream = null;
+let cameraActive = false;
 
-async function showCamera() {
+function showCamera() {
   const camView = document.getElementById('camera-view');
-  const video = document.getElementById('camera');
+  const img = document.getElementById('camera-stream');
 
-  // pastikan panel kamera terlihat
   camView.style.display = "flex";
 
-  // jika kamera sudah aktif, jangan buka lagi
-  if (stream) {
-    video.srcObject = stream;
-    return;
-  }
-
-  try {
-    stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: "user" }
-    });
-
-    video.srcObject = stream;
-
-  } catch (err) {
-    console.error("Error membuka kamera:", err);
-    alert("Kamera tidak bisa diakses!");
+  if (!cameraActive) {
+    img.src = "http://127.0.0.1:5000/camera1";
+    cameraActive = true;
   }
 }
 
 function stopCamera() {
-  if (stream) {
-    stream.getTracks().forEach(t => t.stop());
-    stream = null;
-  }
+  const camView = document.getElementById('camera-view');
+  const img = document.getElementById('camera-stream');
 
-  document.getElementById('camera-view').style.display = "none";
+  camView.style.display = "none";
+  img.src = "";
+  cameraActive = false;
 }
 
 </script>
