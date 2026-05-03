@@ -92,8 +92,72 @@ export function createDashboardThreeScene({
     const CONC = ml(0x141e2c);
     const CONC2 = ml(0x0e1620);
     const LED = ml(0x0e2e18, 0x0ea040, 1.4);
+    /** Kuning atap (selaras jalan / referensi layout) */
+    const ROOF = ml(0xd4a000, 0xffc040, 0.12);
 
     const BODIES = [];
+
+    /**
+     * Atap pelana terbagi 2: animasi geser kiri/kanan untuk akses crane dari atas.
+     * Target buka/tutup dihitung dari data ruangan (fase/status uji).
+     */
+    const roofActuators = new Map();
+
+    /** Target geser atap 0=tutup penuh, 1=buka penuh, 0.5=STANDBY */
+    function roofSlideTarget01(room) {
+        if (!room) return 0;
+        if (room.roof_state === 'OPEN') return 1;
+        if (room.roof_state === 'STANDBY') return 0.5;
+        if (room.roof_state === 'CLOSE') return 0;
+        const ph = room.phase;
+        const st = room.st;
+        if (ph === 'IDLE' || ph === 'STANDBY' || ph === 'SETUP' || ph === 'COMPLETE') return 1;
+        if (st === 'STANDBY') return 1;
+        return 0;
+    }
+
+    /**
+     * @param {string} id
+     * @param {number} x
+     * @param {number} z
+     * @param {number} w
+     * @param {number} d
+     * @param {number} h tinggi badan gedung (sama seperti building())
+     */
+    function addRetractableGableRoof(id, x, z, w, d, h) {
+        const cy = h / 2 + 0.22;
+        const topY = cy + h / 2;
+        const halfW = w / 2;
+        const rise = Math.min(1.05, Math.max(0.42, w * 0.13));
+        const L = Math.sqrt(halfW * halfW + rise * rise);
+        const angle = Math.atan2(rise, halfW);
+        const thick = 0.12;
+        const depth = d + 0.1;
+        const slide = Math.min(halfW * 0.92, 1.15);
+
+        const left = new THREE.Mesh(new THREE.BoxGeometry(L, thick, depth), ROOF);
+        left.position.set(x - halfW / 2, topY + rise / 2, z);
+        left.rotation.z = angle;
+        left.castShadow = true;
+        left.receiveShadow = true;
+        scene.add(left);
+
+        const right = new THREE.Mesh(new THREE.BoxGeometry(L, thick, depth), ROOF);
+        right.position.set(x + halfW / 2, topY + rise / 2, z);
+        right.rotation.z = -angle;
+        right.castShadow = true;
+        right.receiveShadow = true;
+        scene.add(right);
+
+        roofActuators.set(id, {
+            left,
+            right,
+            baseLX: left.position.x,
+            baseRX: right.position.x,
+            slide,
+            open01: 0,
+        });
+    }
     const addm = (geo, mat, x, y, z, rx = 0, ry = 0, rz = 0) => {
         const me = new THREE.Mesh(geo, mat);
         me.position.set(x, y, z);
@@ -265,29 +329,35 @@ export function createDashboardThreeScene({
 
     building('pit3', -14, -9, 6.3, 5.5, 3.0, GW(), 0x4a8460, { face: 'right', off: 0 }, null);
     addInnerColumns(-14, -9, 6.3, 5.5, 3.0);
+    addRetractableGableRoof('pit3', -14, -9, 6.3, 5.5, 3.0);
     building('pit4', -14, -3.4, 6.3, 5.4, 3.0, RW(), 0xa83848, { face: 'right', off: 0 }, null);
     addInnerColumns(-14, -3.4, 6.3, 5.4, 3.0);
+    addRetractableGableRoof('pit4', -14, -3.4, 6.3, 5.4, 3.0);
     building('cr3', -5.5, -11, 4.0, 2.0, 2.0, CRW_BLUE(), 0x1a8fff, { face: 'front', off: 0.7 }, { face: 'front', count: 2 });
     building('cell5', 1.8, -10, 6.5, 6, 3.0, GW(), 0xa83848, { face: 'right', off: 2 }, null);
-    addm(BOX(6.5, 0.06, 6.0), ml(0xc8960c), 1.8, 3.22, -10);
+    addRetractableGableRoof('cell5', 1.8, -10, 6.5, 6, 3.0);
     building('cell4', 1.8, -3.8, 6.5, 6, 3.0, RW(), 0xa83848, { face: 'front', off: 2.2 }, null);
-    addm(BOX(6.5, 0.06, 6.0), ml(0xc8960c), 1.8, 3.22, -3.8);
+    addRetractableGableRoof('cell4', 1.8, -3.8, 6.5, 6, 3.0);
     building('pit1', 10.8, -9, 4.5, 7, 3.0, RW(), 0xa83848, { face: 'front', off: -1.3 }, null);
     addInnerColumns(10.8, -9, 4.5, 7.0, 3.0);
+    addRetractableGableRoof('pit1', 10.8, -9, 4.5, 7, 3.0);
     building('pit2', 15.5, -9, 4.5, 7, 3.0, RW(), 0xa83848, { face: 'front', off: 1.3 }, null);
     addInnerColumns(15.5, -9, 4.5, 7.0, 3.0);
+    addRetractableGableRoof('pit2', 15.5, -9, 4.5, 7, 3.0);
     building('cr1', 10.5, 1.5, 4.0, 2.0, 2.0, CRW_BLUE(), 0x1a8fff, { face: 'front', off: 0.7 }, { face: 'front', count: 2 });
     building('cr2', 15.5, 1.5, 4.0, 2.0, 2.0, CRW_BLUE(), 0x1a8fff, { face: 'front', off: 0.7 }, { face: 'front', count: 2 });
     building('pit5', -12.3, 11, 5.8, 6.5, 3.0, GW(), 0x4a8460, null, null);
     addInnerColumns(-12.3, 11, 5.8, 6.5, 3.0);
+    addRetractableGableRoof('pit5', -12.3, 11, 5.8, 6.5, 3.0);
     building('pit6', -6.2, 11, 5.8, 6.5, 3.0, GW(), 0x4a8460, null, null);
     addInnerColumns(-6.2, 11, 5.8, 6.5, 3.0);
+    addRetractableGableRoof('pit6', -6.2, 11, 5.8, 6.5, 3.0);
     building('cell3', 1.8, 13, 6.7, 6.1, 3.0, GW(), 0x4a8460, null, null);
-    addm(BOX(6.7, 0.06, 6.1), ml(0xc8960c), 1.8, 3.22, 13);
+    addRetractableGableRoof('cell3', 1.8, 13, 6.7, 6.1, 3.0);
     building('cell2', 8.6, 13, 6.7, 6.1, 3.0, GW(), 0x4a8460, null, null);
-    addm(BOX(6.7, 0.06, 6.1), ml(0xc8960c), 8.6, 3.22, 13);
+    addRetractableGableRoof('cell2', 8.6, 13, 6.7, 6.1, 3.0);
     building('cell1', 15.5, 13, 6.7, 6.1, 3.0, GW(), 0x4a8460, null, null);
-    addm(BOX(6.7, 0.06, 6.1), ml(0xc8960c), 15.5, 3.22, 13);
+    addRetractableGableRoof('cell1', 15.5, 13, 6.7, 6.1, 3.0);
 
     const LBLS = [
         { id: 'cr3', anchor: new THREE.Vector3(-5.5, 2.5, -11), t: 'CONTROL ROOM 3', ox: 80, oy: -120, by: -120 },
@@ -399,6 +469,14 @@ export function createDashboardThreeScene({
                     else m.emissiveIntensity = m._base || 0;
                 }
             });
+        });
+
+        roofActuators.forEach((rec, buildingId) => {
+            const room = findRoom(buildingId);
+            const target = roofSlideTarget01(room);
+            rec.open01 = THREE.MathUtils.lerp(rec.open01, target, 0.06);
+            rec.left.position.x = rec.baseLX - rec.slide * rec.open01;
+            rec.right.position.x = rec.baseRX + rec.slide * rec.open01;
         });
 
         LBLS.forEach((lb) => {

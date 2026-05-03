@@ -28,13 +28,13 @@
       <div class="bh">
         <div class="bt"><i class="ti ti-building"></i>CONTROL ROOMS</div>
       </div>
+
       <div class="blk-body-flush">
         <div class="cr-item active cr-item--ic" id="nav-cr1">
           <div class="cr-info" onclick="openPanel('cr1')">
             <div class="cr-name">Control Room 1</div>
             <div class="cr-sub">Cell 1 · Cell 2 · Cell 3</div>
           </div>
-          <span class="cr-badge wa" id="nb-cr1">WARN</span>
           <button type="button" class="cr-expand-btn" id="exp-cr1" onclick="toggleRooms('cr1')"><i class="ti ti-chevron-right"></i></button>
         </div>
         <div class="cr-rooms" id="rooms-cr1"></div>
@@ -43,7 +43,6 @@
             <div class="cr-name">Control Room 2</div>
             <div class="cr-sub">Cell 4 · Cell 5 · Pit 1 · Pit 2</div>
           </div>
-          <span class="cr-badge cr" id="nb-cr2">ALARM</span>
           <button type="button" class="cr-expand-btn" id="exp-cr2" onclick="toggleRooms('cr2')"><i class="ti ti-chevron-right"></i></button>
         </div>
         <div class="cr-rooms" id="rooms-cr2"></div>
@@ -52,7 +51,6 @@
             <div class="cr-name">Control Room 3</div>
             <div class="cr-sub">Pit 3 · Pit 4 · Pit 5 · Pit 6</div>
           </div>
-          <span class="cr-badge ok" id="nb-cr3">OK</span>
           <button type="button" class="cr-expand-btn" id="exp-cr3" onclick="toggleRooms('cr3')"><i class="ti ti-chevron-right"></i></button>
         </div>
         <div class="cr-rooms" id="rooms-cr3"></div>
@@ -63,41 +61,22 @@
         <div class="bt"><i class="ti ti-bell-ringing"></i>ALARM AKTIF</div>
         <span class="bc cr" id="al-count">0</span>
       </div>
-      <div class="bb" id="al-list">
-        <div class="al-empty-msg">Tidak ada alarm aktif</div>
-      </div>
-    </div>
-    <div class="blk">
-      <div class="bh">
-        <div class="bt"><i class="ti ti-tool"></i>UTILITAS</div>
-      </div>
-      <div class="util-block" onclick="openUtilPanel()">
-        <div class="util-row">
-          <div class="util-ico util-ico--in"><i class="ti ti-droplet"></i></div>
-          <div class="util-info">
-            <div class="util-name">Motor PAM</div>
-            <div class="util-val" id="sb-pam-val">125.4 L/min · 4.8 bar</div>
+      <div class="bb al-legend-wrap">
+        <div class="al-subsection">
+          <div class="al-heading">Alarm</div>
+          <div id="al-list">
+            <div class="al-empty-msg">Tidak ada alarm aktif</div>
           </div>
-          <div class="util-st ok" id="sb-pam-st">RUN</div>
         </div>
-        <div class="util-row">
-          <div class="util-ico util-ico--ok"><i class="ti ti-bolt"></i></div>
-          <div class="util-info">
-            <div class="util-name">Listrik</div>
-            <div class="util-val" id="sb-pwr-val">284.2 kW · PF 0.92</div>
+        <div class="al-subsection">
+          <div class="al-heading">Area Alerts</div>
+          <div id="area-list">
+            <div class="al-empty-msg">Tidak ada area alert</div>
           </div>
-          <div class="util-st ok" id="sb-pwr-st">NORMAL</div>
-        </div>
-        <div class="util-row">
-          <div class="util-ico util-ico--wa"><i class="ti ti-air-conditioning"></i></div>
-          <div class="util-info">
-            <div class="util-name">HVAC</div>
-            <div class="util-val" id="sb-hvac-val">Set 22°C · Actual 23.1°C</div>
-          </div>
-          <div class="util-st ok" id="sb-hvac-st">OK</div>
         </div>
       </div>
     </div>
+
   </div>
 </aside>
 
@@ -123,22 +102,14 @@
     </div>
   </div>
   <div class="rp-tabs" id="rp-tabs">
-    <div class="rp-tab on" id="tab-s" onclick="swTab('s')">SENSOR</div>
+    <div class="rp-tab on" id="tab-s" onclick="swTab('s')">TEKANAN</div>
     <div class="rp-tab" id="tab-l" onclick="swTab('l')">LOCK</div>
-    <div class="rp-tab" id="tab-r" onclick="swTab('r')">RUANGAN</div>
     <div class="rp-tab" id="tab-e" onclick="swTab('e')">LOG</div>
-    <div class="rp-tab" id="tab-u" onclick="swTab('u')">UTILITAS</div>
-    <div class="rp-tab" id="tab-m" onclick="swTab('m')">MESIN</div>
-    <div class="rp-tab" id="tab-p" onclick="swTab('p')">PRESSURE</div>
   </div>
   <div class="rp-body">
     <div id="pane-s"></div>
     <div id="pane-l"></div>
-    <div id="pane-r"></div>
     <div id="pane-e"></div>
-    <div id="pane-u"></div>
-    <div id="pane-m"></div>
-    <div id="pane-p"></div>
   </div>
 </div>
 
