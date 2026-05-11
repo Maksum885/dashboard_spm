@@ -4,7 +4,6 @@ namespace App\Http\Middleware;
 
 use Closure;
 use Illuminate\Http\Request;
-use App\Models\TestingRoom;
 
 class RoomAccessMiddleware
 {
@@ -18,12 +17,12 @@ class RoomAccessMiddleware
             return $next($request);
         }
 
-        // Operator hanya bisa akses room di control room-nya
-        if ($user->role === 'operator' && $roomId) {
-            $testingRoom = TestingRoom::find($roomId);
-            if ($testingRoom && $testingRoom->control_room_id === $user->control_room_id) {
+        // Operator & viewer: satu testing room, atau (legacy) semua room di control room yang sama
+        if (in_array($user->role, ['operator', 'viewer'], true) && $roomId) {
+            if ($user->canAccessTestingRoomId((int) $roomId)) {
                 return $next($request);
             }
+
             return response()->json(['message' => 'Akses ditolak untuk room ini'], 403);
         }
 

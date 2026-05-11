@@ -6,6 +6,7 @@ const Z = 22;
 /**
  * @param {object} opts
  * @param {HTMLCanvasElement} opts.canvas
+ * @param {HTMLElement | null} [opts.mapEl] area 3D (default: fullscreen)
  * @param {HTMLElement} opts.lyrEl
  * @param {SVGSVGElement} opts.svgEl
  * @param {HTMLElement} opts.tipEl
@@ -16,6 +17,7 @@ const Z = 22;
  */
 export function createDashboardThreeScene({
     canvas,
+    mapEl = null,
     lyrEl,
     svgEl,
     tipEl,
@@ -30,7 +32,20 @@ export function createDashboardThreeScene({
         powerPreference: 'high-performance',
     });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    renderer.setSize(window.innerWidth, window.innerHeight);
+
+    function getViewportSize() {
+        if (mapEl) {
+            const r = mapEl.getBoundingClientRect();
+            return {
+                w: Math.max(1, Math.floor(r.width)),
+                h: Math.max(1, Math.floor(r.height)),
+            };
+        }
+        return { w: window.innerWidth, h: window.innerHeight };
+    }
+
+    const vp0 = getViewportSize();
+    renderer.setSize(vp0.w, vp0.h);
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     renderer.toneMapping = THREE.ReinhardToneMapping;
@@ -40,7 +55,10 @@ export function createDashboardThreeScene({
     scene.background = new THREE.Color(0xdce8f5);
     scene.fog = new THREE.FogExp2(0xdce8f5, 0.0053);
 
-    const getA = () => window.innerWidth / window.innerHeight;
+    const getA = () => {
+        const { w, h } = getViewportSize();
+        return w / h;
+    };
     const cam = new THREE.OrthographicCamera(-Z * getA(), Z * getA(), Z, -Z, 0.1, 500);
     cam.position.set(42, 34, 42);
     cam.lookAt(2, 1, 2);
@@ -397,8 +415,9 @@ export function createDashboardThreeScene({
     const MV = new THREE.Vector2();
 
     canvas.addEventListener('mousemove', (e) => {
-        MV.x = (e.clientX / window.innerWidth) * 2 - 1;
-        MV.y = -((e.clientY / window.innerHeight) * 2 - 1);
+        const rect = canvas.getBoundingClientRect();
+        MV.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+        MV.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
         RC.setFromCamera(MV, cam);
         const hits = RC.intersectObjects(BODIES, false);
         if (hits.length) {
@@ -413,7 +432,7 @@ export function createDashboardThreeScene({
                 tipEl.style.color = isCR ? '#1564c0' : d.col;
                 const roomD = isCR ? null : findRoom(id);
                 const label = roomD ? `${roomD.nm}` : d.nm;
-                tipEl.textContent = `${label} · Klik untuk detail`;
+                tipEl.textContent = `${label} · Click for details`;
                 tipEl.style.left = `${e.clientX + 14}px`;
                 tipEl.style.top = `${e.clientY - 14}px`;
                 tipEl.style.opacity = '1';
@@ -432,8 +451,9 @@ export function createDashboardThreeScene({
 
     canvas.addEventListener('click', (e) => {
         if (Math.abs(e.clientX - ui.mdx) > 6 || Math.abs(e.clientY - ui.mdy) > 6) return;
-        MV.x = (e.clientX / window.innerWidth) * 2 - 1;
-        MV.y = -((e.clientY / window.innerHeight) * 2 - 1);
+        const rect = canvas.getBoundingClientRect();
+        MV.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+        MV.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
         RC.setFromCamera(MV, cam);
         const hits = RC.intersectObjects(BODIES, false);
         if (hits.length) {
@@ -487,8 +507,9 @@ export function createDashboardThreeScene({
                 return;
             }
             lb._vis = true;
-            lb._sx = (TMP.x * 0.5 + 0.5) * window.innerWidth;
-            lb._sy = (-0.5 * TMP.y + 0.5) * window.innerHeight;
+            const { w: vw, h: vh } = getViewportSize();
+            lb._sx = (TMP.x * 0.5 + 0.5) * vw;
+            lb._sy = (-0.5 * TMP.y + 0.5) * vh;
             lb._lx = lb._sx + lb.ox;
             lb._ly = lb._sy + lb.oy;
             lb.el.style.opacity = '1';
@@ -497,8 +518,9 @@ export function createDashboardThreeScene({
             lb.el.style.transform = 'translate(-50%,-50%)';
         });
 
-        svgEl.setAttribute('width', window.innerWidth);
-        svgEl.setAttribute('height', window.innerHeight);
+        const { w: svgW, h: svgH } = getViewportSize();
+        svgEl.setAttribute('width', svgW);
+        svgEl.setAttribute('height', svgH);
         svgEl.innerHTML = LBLS.map((lb) => {
             if (!lb._vis || !lb._sx) return '';
             const ew = (lb.el.offsetWidth || 80) / 2;
@@ -528,10 +550,16 @@ export function createDashboardThreeScene({
         cam.top = Z;
         cam.bottom = -Z;
         cam.updateProjectionMatrix();
-        renderer.setSize(window.innerWidth, window.innerHeight);
+        const { w, h } = getViewportSize();
+        renderer.setSize(w, h);
     };
 
     window.addEventListener('resize', onResize);
+    let mapResizeObs = null;
+    if (mapEl && typeof ResizeObserver !== 'undefined') {
+        mapResizeObs = new ResizeObserver(() => onResize());
+        mapResizeObs.observe(mapEl);
+    }
 
     return {
         start() {
@@ -540,6 +568,7 @@ export function createDashboardThreeScene({
         dispose() {
             cancelAnimationFrame(raf);
             window.removeEventListener('resize', onResize);
+            if (mapResizeObs) mapResizeObs.disconnect();
             renderer.dispose();
         },
     };

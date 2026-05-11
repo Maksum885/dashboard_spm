@@ -1,3 +1,4 @@
+import './bootstrap.js';
 import { initDashboard } from './dashboard/init.js';
 
 document.addEventListener('DOMContentLoaded', () => {

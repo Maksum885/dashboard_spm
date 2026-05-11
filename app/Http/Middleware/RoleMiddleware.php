@@ -11,7 +11,14 @@ class RoleMiddleware
     {
         $user = $request->user();
 
-        if (!$user || !in_array($user->role, $roles)) {
+        $allowed = [];
+        foreach ($roles as $segment) {
+            foreach (explode(',', $segment) as $r) {
+                $allowed[] = trim($r);
+            }
+        }
+
+        if (! $user || ! in_array($user->role, $allowed, true)) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 

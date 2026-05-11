@@ -22,3 +22,32 @@
 Homestead.json
 Homestead.yaml
 Thumbs.db
+
+# ── Python (Modbus bridge) — jangan commit venv / bytecode / build ──
+.venv/
+venv/
+ENV/
+**/.venv/
+**/__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+pip-log.txt
+pip-delete-this-directory.txt
+*.egg-info/
+.eggs/
+dist/
+build/
+*.egg
+.python-version
+
+# Secrets & lokal untuk python-modbus (salin dari contoh; token/webhook di sini)
+python-modbus/.env
+
+# Cache / tooling
+.ruff_cache/
+.mypy_cache/
+.pytest_cache/
+coverage.xml
+htmlcov/

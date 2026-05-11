@@ -1,22 +1,56 @@
+from __future__ import annotations
 import os
 from dotenv import load_dotenv
+
 load_dotenv()
 
-PLC_DEVICES = {
-    1:  {"ip": os.getenv("PLC_01_IP", "192.168.1.1"), "name": "Test Pit 1",  "unit_id": 1},
-    2:  {"ip": os.getenv("PLC_02_IP", "192.168.1.2"), "name": "Test Pit 2",  "unit_id": 1},
-    3:  {"ip": os.getenv("PLC_03_IP", "192.168.1.3"), "name": "Test Pit 3",  "unit_id": 1},
-    4:  {"ip": os.getenv("PLC_04_IP", "192.168.1.4"), "name": "Test Pit 4",  "unit_id": 1},
-    5:  {"ip": os.getenv("PLC_05_IP", "192.168.1.5"), "name": "Test Pit 5",  "unit_id": 1},
-    6:  {"ip": os.getenv("PLC_06_IP", "192.168.1.6"), "name": "Test Pit 6",   "unit_id": 1},
-    7:  {"ip": os.getenv("PLC_07_IP", "192.168.1.11"), "name": "Test Cell 1",   "unit_id": 1},
-    8:  {"ip": os.getenv("PLC_08_IP", "192.168.1.12"), "name": "Test Cell 2",   "unit_id": 1},
-    9:  {"ip": os.getenv("PLC_09_IP", "192.168.1.13"), "name": "Test Cell 3",   "unit_id": 1},
-    10: {"ip": os.getenv("PLC_10_IP", "192.168.1.14"), "name": "Test Cell 4",   "unit_id": 1},
-    11: {"ip": os.getenv("PLC_11_IP", "192.168.1.15"), "name": "Test Cell 5",   "unit_id": 1},
-}
+# ─── Modbus TCP ───────────────────────────────────────────────────────────────
 
-MODBUS_PORT        = int(os.getenv("MODBUS_PORT", 502))
-MODBUS_TIMEOUT     = float(os.getenv("MODBUS_TIMEOUT", 3.0))
-POLL_INTERVAL_SEC  = float(os.getenv("POLL_INTERVAL_SEC", 5.0))
-LARAVEL_WEBHOOK    = os.getenv("LARAVEL_WEBHOOK_URL", "http://127.0.0.1:8000/api/plc/webhook")
+MODBUS_PORT    = int(os.getenv("MODBUS_PORT",    "502"))
+MODBUS_TIMEOUT = float(os.getenv("MODBUS_TIMEOUT", "3.0"))
+
+# ─── Polling ──────────────────────────────────────────────────────────────────
+
+POLL_INTERVAL_SEC = float(os.getenv("POLL_INTERVAL_SEC", "5.0"))
+
+# ─── Laravel integration ──────────────────────────────────────────────────────
+
+LARAVEL_WEBHOOK         = os.getenv("LARAVEL_WEBHOOK_URL",  "http://127.0.0.1:8000/api/plc/webhook")
+LARAVEL_WEBHOOK_TIMEOUT = float(os.getenv("LARAVEL_WEBHOOK_TIMEOUT", "30.0"))
+WEBHOOK_MAX_CONCURRENT  = max(1, int(os.getenv("WEBHOOK_MAX_CONCURRENT", "2")))
+
+# Re-fetch daftar enabled device dari Laravel Settings (0 = hanya saat startup)
+PLC_MAP_REFRESH_SEC = float(os.getenv("PLC_MAP_REFRESH_SEC", "15"))
+
+
+def _dev(room_id: int, default_ip: str, name: str) -> dict:
+    """Build satu entry PLC device dengan override per-room via env."""
+    env_key = f"PLC_{room_id:02d}_IP"
+    return {
+        "ip":      os.getenv(env_key, default_ip),
+        "name":    name,
+        "unit_id": int(os.getenv("PLC_DEFAULT_UNIT_ID", "1")),
+        "port":    MODBUS_PORT,
+    }
+
+
+# ─── PLC Devices (SINKRON dengan DatabaseSeeder) ─────────────────────────────
+#
+# SEBELUM deploy ke lapangan:
+# 1. Jalankan `php artisan db:seed` → cek id di tabel testing_rooms
+# 2. Cocokkan id di sini dengan id database
+# 3. Isi IP PLC yang sebenarnya via Settings UI atau env PLC_xx_IP
+#
+PLC_DEVICES: dict[int, dict] = {
+    1:  _dev(1,  "192.168.1.1", "Test Pit 1"),
+    2:  _dev(2,  "192.168.1.2", "Test Pit 2"),
+    3:  _dev(3,  "192.168.1.3", "Test Pit 3"),
+    4:  _dev(4,  "192.168.1.4", "Test Pit 4"),
+    5:  _dev(5,  "192.168.1.5", "Test Pit 5"),
+    6:  _dev(6,  "192.168.1.6", "Test Pit 6"),
+    7:  _dev(7,  "192.168.1.11", "Test Cell 1"),
+    8:  _dev(8,  "192.168.1.12", "Test Cell 2"),
+    9:  _dev(9,  "192.168.1.13", "Test Cell 3"),
+    10: _dev(10, "192.168.1.14", "Test Cell 4"),
+    11: _dev(11, "192.168.1.15", "Test Cell 5"),
+}

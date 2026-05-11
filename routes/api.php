@@ -1,39 +1,57 @@
 <?php
 
-use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
-use App\Http\Controllers\Api\AuthController;
-use App\Http\Controllers\Api\PlcController;
+use App\Http\Controllers\Api\ActivityLogController;
 use App\Http\Controllers\Api\AlarmController;
+use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\DashboardController;
+use App\Http\Controllers\Api\PlcController;
+use App\Http\Controllers\Api\RoomController;
+use App\Http\Controllers\Api\UserController;
 
-// Auth
-Route::post('/login',  [AuthController::class, 'login']);
+Route::post('/login', [AuthController::class, 'login']);
 
 Route::middleware('auth:sanctum')->group(function () {
-
     Route::post('/logout', [AuthController::class, 'logout']);
-    Route::get('/me',      [AuthController::class, 'me']);
+    Route::get('/me', [AuthController::class, 'me']);
 
-    // PLC Data (semua role bisa, tapi dibatasi room access)
-    Route::get('/plc/{room_id}/data', [PlcController::class, 'getRoomData'])
+    Route::get('/dashboard', DashboardController::class);
+
+    Route::get('/rooms', [RoomController::class, 'index']);
+    Route::get('/rooms/{room_id}', [RoomController::class, 'show'])
         ->middleware('room.access');
 
+    Route::get('/plc/{room_id}/data', [PlcController::class, 'getRoomData'])
+        ->middleware('room.access');
     Route::get('/plc/{room_id}/logs', [PlcController::class, 'getRoomLogs'])
         ->middleware('room.access');
 
-    // Admin only
+    Route::get('/alarms', [AlarmController::class, 'index']);
+    Route::get('/alarms/count', [AlarmController::class, 'count']);
+    Route::patch('/alarms/{id}/ack', [AlarmController::class, 'acknowledge'])
+        ->middleware('role:admin,operator');
+    Route::patch('/alarms/{id}/resolve', [AlarmController::class, 'resolve'])
+        ->middleware('role:admin,operator');
+
+    Route::get('/activity-logs', [ActivityLogController::class, 'index']);
+    Route::get('/activity-logs/room/{room_id}', [ActivityLogController::class, 'byRoom'])
+        ->middleware('room.access');
+    Route::get('/activity-logs/maintenance/{room_id}', [ActivityLogController::class, 'maintenanceLogs'])
+        ->middleware('room.access');
+
     Route::middleware('role:admin')->group(function () {
         Route::get('/plc/all/data', [PlcController::class, 'getAllRoomsData']);
-        Route::get('/admin/users',  [\App\Http\Controllers\Api\UserController::class, 'index']);
-    });
 
-    // Alarm
-    Route::get('/alarms',              [AlarmController::class, 'index']);
-    Route::patch('/alarms/{id}/ack',   [AlarmController::class, 'acknowledge']);
+        Route::get('/admin/users', [UserController::class, 'index']);
+        Route::post('/admin/users', [UserController::class, 'store']);
+        Route::put('/admin/users/{id}', [UserController::class, 'update']);
+        Route::delete('/admin/users/{id}', [UserController::class, 'destroy']);
+        Route::patch('/admin/users/{id}/toggle', [UserController::class, 'toggle']);
+    });
 });
 
-// Webhook dari Python (no auth, tapi bisa tambah secret key)
 Route::post('/plc/webhook', [PlcController::class, 'webhook'])
-    ->middleware('throttle:120,1'); // max 120 req/menit
+    ->middleware('throttle:120,1');
 
-Route::get('/rooms', [App\Http\Controllers\Api\RoomController::class, 'index']);
+Route::get('/plc/bridge-devices', [PlcController::class, 'bridgeDevices'])
+    ->middleware('throttle:60,1');

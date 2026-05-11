@@ -1,55 +1,39 @@
 """
-python-modbus/main.py
-FastAPI entry point untuk SPM-SCADA Modbus Microservice.
-
-Jalankan:
-    uvicorn main:app --host 0.0.0.0 --port 8001 --reload
+Microservice: health + Modbus TCP polling → Laravel webhook (realtime DB + cache).
 """
 
 import asyncio
+import os
 from contextlib import asynccontextmanager
+from pathlib import Path
+
+from dotenv import load_dotenv
+
+load_dotenv(Path(__file__).resolve().parent / ".env")
+
 from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
 
-from modbus.poller import start_polling
-from routers import plc, health
+from modbus.device_loader import load_plc_devices_sync
+from modbus.poller import set_plc_devices, start_polling
+from routers import health, plc
 
-
-# ─── Lifespan: start/stop background polling ─────────────────────────────────
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
-    # Startup: mulai polling background
-    polling_task = asyncio.create_task(start_polling())
-    print("[INFO] SPM-TestingBay Modbus Service started.")
+async def lifespan(_app: FastAPI):
+    poll_task = None
+    if os.getenv("ENABLE_POLLING", "1").strip() in ("1", "true", "yes"):
+        set_plc_devices(load_plc_devices_sync())
+        poll_task = asyncio.create_task(start_polling())
     yield
-    # Shutdown: hentikan polling
-    polling_task.cancel()
-    try:
-        await polling_task
-    except asyncio.CancelledError:
-        pass
-    print("[INFO] SPM-TestingBay Modbus Service stopped.")
+    if poll_task:
+        poll_task.cancel()
+        try:
+            await poll_task
+        except asyncio.CancelledError:
+            pass
 
 
-# ─── App ──────────────────────────────────────────────────────────────────────
+app = FastAPI(title="SPM Modbus Bridge", version="0.1.0", lifespan=lifespan)
 
-app = FastAPI(
-    title="SPM-TestingBay Modbus Microservice",
-    description="Modbus TCP polling service untuk 11 PLC. Mengirim data ke Laravel via webhook.",
-    version="1.0.0",
-    lifespan=lifespan,
-)
-
-# CORS: izinkan hanya dari Laravel (ubah origin sesuai domain production)
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["http://127.0.0.1:8000", "http://localhost:8000"],
-    allow_methods=["GET", "POST"],
-    allow_headers=["*"],
-)
-
-# ─── Routers ──────────────────────────────────────────────────────────────────
-
-app.include_router(health.router)
-app.include_router(plc.router)
+app.include_router(health.router, tags=["health"])
+app.include_router(plc.router, prefix="/plc", tags=["plc"])
