@@ -1,11 +1,22 @@
-import axios from 'axios';
+import AuthService from './authService.js';
 import { DUMMY_CONTROL_ROOMS, DUMMY_UTILITIES } from '../data/dummy.js';
 
 const clone = (v) => structuredClone(v);
 
+function useDummyDashboard() {
+    return import.meta.env.VITE_DASHBOARD_USE_DUMMY === 'true';
+}
+
+/** Tanpa dummy: tidak ada data palsu saat API gagal / belum login. */
+function emptyDashboardPayload() {
+    return {
+        controlRooms: {},
+        utilities: {},
+    };
+}
+
 /**
  * Normalizes API JSON into the shape the dashboard UI expects.
- * Adjust field mapping here when your PostgreSQL/Laravel API schema is finalized.
  *
  * @param {unknown} raw
  * @returns {{ controlRooms: Record<string, object>, utilities: object }}
@@ -27,33 +38,51 @@ export function normalizeDashboardPayload(raw) {
 }
 
 /**
- * Service entry: swap implementation to PostgreSQL-backed API by setting
- * VITE_DASHBOARD_API_URL in .env (e.g. https://app.test — no trailing slash required).
+ * Ambil payload dashboard:
+ * - Jika `VITE_DASHBOARD_USE_DUMMY=true` → data demo dari `dummy.js` (hanya untuk uji UI).
+ * - Selain itu → `/api/dashboard` (Sanctum), lalu opsional `VITE_DASHBOARD_API_URL` + axios.
+ * - Jika semua gagal → payload kosong (bukan dummy).
  */
 export async function getDashboardData() {
-    const base = import.meta.env.VITE_DASHBOARD_API_URL || '';
-
-    if (!base) {
+    if (useDummyDashboard()) {
         return {
             controlRooms: clone(DUMMY_CONTROL_ROOMS),
             utilities: clone(DUMMY_UTILITIES),
         };
     }
 
-    const url = `${String(base).replace(/\/$/, '')}/api/dashboard`;
-    const res = await axios.get(url, {
-        headers: { Accept: 'application/json' },
-        validateStatus: () => true,
-    });
-
-    if (res.status < 200 || res.status >= 300) {
-        throw new Error(`Dashboard API HTTP ${res.status}`);
+    const token = AuthService.getToken();
+    if (token) {
+        try {
+            const json = await AuthService.apiJson('/api/dashboard', { method: 'GET' });
+            if (json) return normalizeDashboardPayload(json);
+        } catch (e) {
+            console.warn('[dashboard] API error:', e.message);
+        }
     }
 
-    const { data } = res;
-    if (typeof data !== 'object' || data === null) {
-        throw new Error('Dashboard API returned invalid JSON');
+    const base = import.meta.env.VITE_DASHBOARD_API_URL || '';
+    if (base) {
+        try {
+            const axios = (await import('axios')).default;
+            const url = `${String(base).replace(/\/$/, '')}/api/dashboard`;
+            const res = await axios.get(url, {
+                headers: { Accept: 'application/json' },
+                validateStatus: () => true,
+            });
+            if (res.status >= 200 && res.status < 300 && typeof res.data === 'object' && res.data) {
+                return normalizeDashboardPayload(res.data);
+            }
+        } catch (e) {
+            console.warn('[dashboard] legacy URL failed:', e.message);
+        }
     }
 
-    return normalizeDashboardPayload(data);
+    return emptyDashboardPayload();
 }
+
+export const PlcAPI = {
+    async getRoomData(roomId) {
+        return AuthService.apiJson(`/api/plc/${roomId}/data`, { method: 'GET' });
+    },
+};

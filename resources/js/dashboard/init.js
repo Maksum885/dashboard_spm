@@ -17,6 +17,7 @@ export async function initDashboard() {
 
     const three = createDashboardThreeScene({
         canvas: document.getElementById('cv'),
+        mapEl: document.getElementById('dash-map'),
         lyrEl: document.getElementById('lyr'),
         svgEl: document.getElementById('lyr-svg'),
         tipEl: document.getElementById('tip'),

@@ -13,6 +13,8 @@ export const ui = {
     mdy: 0,
     curId: null,
     curRoomId: null,
-    panelMode: 'cr',
+    panelMode: "none",
     lv: null,
+    /** Camera tab: expand panel over the 3D map (sidebar stays visible). */
+    cameraWide: false,
 };

@@ -1,59 +1,82 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# Sistem / dashboard monitoring pada testing bay
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+Repositori ini berisi **sistem dan dashboard monitoring** untuk area **testing bay**: pengawas melihat kondisi tiap **test pit** dan **test cell** dari browser, tanpa harus berdiri di depan panel PLC.
 
-## About Laravel
+Aplikasi web dibangun dengan **Laravel** (backend + API) dan **JavaScript/Vite** (tampilan dashboard). Data dari PLC di lapangan masuk ke server melalui **jembatan polling** (service Python di folder `python-modbus/`) yang mengirim hasil baca ke aplikasi.
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+---
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+## Apa yang dilakukan sistem ini
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+- Menyatukan tampilan **beberapa control room** dan **ruang uji** (pit/cell) dalam satu halaman utama.
+- Menampilkan **status koneksi** per ruang terhadap perangkat PLC (online/offline) agar operator tahu apakah angka di layar masih hidup dari lapangan.
+- Memuat **tekanan**, **posisi atap**, **mode panel**, **status uji**, **pintu**, dan **kondisi darurat** sesuai data yang diterima dari PLC (detail register dan pemetaannya ada di dokumentasi teknis, bukan di README ini).
+- Menampilkan **alarm aktif** (termasuk darurat dan gangguan motor) di sidebar agar cepat terlihat.
+- Menyediakan **log peristiwa** ringkas per ruang di panel detail.
+- Mendukung **pembaruan data secara berkala** dari server dan, bila dikonfigurasi, **pembaruan hampir realtime** lewat saluran broadcast ke browser.
 
-## Learning Laravel
+---
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework. You can also check out [Laravel Learn](https://laravel.com/learn), where you will be guided through building a modern Laravel application.
+## Fitur utama (sisi pengguna)
 
-If you don't feel like reading, [Laracasts](https://laracasts.com) can help. Laracasts contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+| Area | Fitur |
+|------|--------|
+| **Dashboard** | Peta fasilitas **3D**; pemilihan ruang; ringkasan status; panel kanan dengan ringkasan tekanan, atap, status operasi, dan alarm ruangan |
+| **Navigasi** | **Admin**: hierarki control room lalu daftar ruang. **Operator / viewer**: daftar ruang uji saja (diurutkan nama), sesuai hak akses |
+| **Pengaturan PLC** | Halaman untuk mengatur koneksi per perangkat (alamat, port, unit, aktif/nonaktif) per ruang uji — nilai disimpan di server |
+| **Akun** | Login/logout; **ganti kata sandi** sendiri dari menu profil; **admin** dapat mengelola operator dan melihat log aktivitas lewat area admin |
+| **API** | Endpoint terautentikasi untuk dashboard, data ruang, alarm, dan log — dipakai oleh antarmuka web dan dapat dipakai integrasi lain (token **Laravel Sanctum**) |
 
-## Laravel Sponsors
+---
 
-We would like to extend our thanks to the following sponsors for funding Laravel development. If you are interested in becoming a sponsor, please visit the [Laravel Partners program](https://partners.laravel.com).
+## Peran pengguna
 
-### Premium Partners
+- **Admin** — melihat seluruh area, mengelola akun operator, serta fitur administrasi lain di panel admin.
+- **Operator** — memantau dan berinteraksi dengan ruang yang ditugaskan (termasuk pengaturan PLC untuk ruang itu, sesuai aturan di aplikasi); dapat mengakui/menyelesaikan alarm lewat API bila tersedia.
+- **Viewer** — memantau ruang yang ditugaskan tanpa peran mengubah konfigurasi seperti operator.
 
-- **[Vehikl](https://vehikl.com)**
-- **[Tighten Co.](https://tighten.co)**
-- **[Kirschbaum Development Group](https://kirschbaumdevelopment.com)**
-- **[64 Robots](https://64robots.com)**
-- **[Curotec](https://www.curotec.com/services/technologies/laravel)**
-- **[DevSquad](https://devsquad.com/hire-laravel-developers)**
-- **[Redberry](https://redberry.international/laravel-development)**
-- **[Active Logic](https://activelogic.com)**
+Hak akses per ruang diatur di data pengguna (control room / ruang uji), bukan di README.
 
-## Contributing
+---
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+## Isi repositori (gambaran)
 
-## Code of Conduct
+- **Kode aplikasi web & API** — folder `app/`, `routes/`, `resources/`, konfigurasi Laravel standar.
+- **`python-modbus/`** — service polling Modbus ke PLC dan pengiriman hasil ke aplikasi Laravel.
+- **`docs/`** — panduan menjalankan sistem dari nol dan penjelasan alur data (cocok untuk tim operasional dan pengembang).
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+---
 
-## Security Vulnerabilities
+## Menyiapkan lingkungan pengembangan
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+Ringkasan; langkah lengkap dan penyesuaian lingkungan ada di **`docs/PANDUAN_MENJALANKAN_SISTEM.md`**.
 
-## License
+1. Salin `.env` dari `.env.example`, atur database, jalankan `php artisan key:generate`, `php artisan migrate`, lalu **`php artisan db:seed`** bila membutuhkan data demo (control room, ruang uji, akun).
+2. Pasang dependensi: `composer install` dan `npm install`.
+3. Untuk satu perintah awal bawaan proyek: **`composer run setup`** (lihat skrip di `composer.json`).
+4. Saat pengembangan aktif: **`composer run dev`** menjalankan server Laravel, Vite, dan proses pendamping yang sudah didefinisikan di `composer.json`.
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+---
+
+## Dokumentasi teknis
+
+| File | Isi |
+|------|-----|
+| `docs/SISTEM_CARA_KERJA_DAN_INDEKS_FILE.md` | **Cara kerja internal** (login web/API, logout, dashboard, PLC), **diagram** (alur, ERD), **indeks semua file `app/`** dan modul utama untuk cross-check saat update |
+| `docs/PANDUAN_MENJALANKAN_SISTEM.md` | Urutan instalasi, database, frontend, dan bridge hingga siap dipakai |
+| `docs/PENJELASAN_CARA_KERJA_SISTEM.md` | Alur dari klik pengguna sampai data PLC, webhook, cache, dan broadcast |
+
+---
+
+## Uji & gaya kode PHP
+
+```bash
+composer test
+vendor/bin/pint
+```
+
+---
+
+## Lisensi
+
+Kerangka aplikasi mengikuti lisensi **Laravel** ([MIT](https://opensource.org/licenses/MIT)). Lisensi produk lengkap mengikuti kebijakan pemilik repositori.
