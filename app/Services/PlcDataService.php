@@ -81,12 +81,10 @@ class PlcDataService
             'nm' => $cr->name,
             'zn' => $cr->description ?? $cr->name,
             'col' => '#1564c0',
-            'line_pressure' => round(max($linePressure, 6.2), 2),
+            'line_pressure' => round(max(0.0, $linePressure), 2),
             'door_lock' => $doorLock,
             'st' => 'NORMAL',
-            'events' => [
-                ['t' => now()->format('H:i'), 'c' => 'ok', 'm' => 'System ready — API data'],
-            ],
+            'events' => [],
             'rooms' => $rooms,
         ];
     }
@@ -95,6 +93,12 @@ class PlcDataService
     {
         $snapshot = Cache::get('plc_snapshot_'.$tr->id);
         $registers = is_array($snapshot) ? ($snapshot['data'] ?? []) : [];
+
+        $device = $tr->plcDevices->first();
+        $plcOnline = ($device?->status ?? 'offline') === 'online';
+        if (! $plcOnline) {
+            $registers = [];
+        }
 
         $uiId = $this->testingRoomUiId($tr);
         $isPit = $tr->type === 'pit';
@@ -125,8 +129,15 @@ class PlcDataService
         $roofClosedBit = $this->registerBool($registers, ['40004', 'roof_tertutup']);
 
         $alarms = $this->activeAlarmFlags($tr->id);
+        $regEmergency = $this->registerBool($registers, ['40002', 'alarm_alert']);
 
         $events = $this->recentEventsForRoom($tr->id);
+
+        /*
+         * Emergency di dashboard = hanya bit hidup #40002 saat PLC online.
+         * Jangan OR dengan AlarmLog: entri DB bisa tertinggal aktif setelah putus PLC → sidebar “palsu”.
+         */
+        $liveEmergency = $plcOnline && $regEmergency;
 
         $base = [
             'id' => $uiId,
@@ -146,8 +157,9 @@ class PlcDataService
             'roof_moving_close' => $roofMovingClose,
             'reg_roof_open' => $roofOpenBit,
             'reg_roof_closed' => $roofClosedBit,
-            'alarm_emergency' => $alarms['emergency'],
-            'alarm_pressure_in' => $alarms['pressure_in'],
+            'alarm_emergency' => $liveEmergency,
+            /* Tidak ada bit PLC terpisah untuk “pressure in alert”; hindari duplikat di sidebar dengan #40002. */
+            'alarm_pressure_in' => false,
             'alarm_left_motor' => $alarms['left_motor'],
             'alarm_right_motor' => $alarms['right_motor'],
             'alarm_motor' => $alarms['motor'],
@@ -165,11 +177,10 @@ class PlcDataService
             ];
         } else {
             $base += [
-                'pres_bbm' => $pressureBar > 0 ? round($pressureBar, 2) : 6.2,
+                'pres_bbm' => $pressureBar > 0 ? round($pressureBar, 2) : 0.0,
             ];
         }
 
-        $device = $tr->plcDevices->first();
         $base['plc_link_status'] = $device?->status ?? 'offline';
         $base['plc_last_seen_at'] = $device?->last_seen_at?->toIso8601String();
 
@@ -275,8 +286,9 @@ class PlcDataService
         $haystack = implode(' ', $codes);
 
         return [
-            'emergency' => str_contains($haystack, 'EMERGENCY'),
-            'pressure_in' => str_contains($haystack, 'PRESSURE'),
+            'emergency' => str_contains($haystack, 'EMERGENCY')
+                || str_contains($haystack, 'ALARM_ALERT'),
+            'pressure_in' => false,
             'left_motor' => str_contains($haystack, 'LEFT'),
             'right_motor' => str_contains($haystack, 'RIGHT'),
             'motor' => str_contains($haystack, 'MOTOR'),
@@ -310,35 +322,38 @@ class PlcDataService
     /**
      * @return array{pam: mixed, listrik: mixed, hvac: mixed}
      */
+    /**
+     * Utilitas agregat — nilai nol sampai ada integrasi sensor/energi nyata.
+     */
     private function defaultUtilities(): array
     {
         return [
             'pam' => [
-                'pump1' => ['nm' => 'Pompa 1', 'st' => 'RUNNING', 'flow' => 125.4, 'pres' => 4.8, 'amp' => 18.2, 'temp_motor' => 62.4, 'run_hours' => 2840],
-                'pump2' => ['nm' => 'Pompa 2', 'st' => 'STANDBY', 'flow' => 0, 'pres' => 0, 'amp' => 0, 'temp_motor' => 28.1, 'run_hours' => 1420],
-                'tank_level' => 78,
-                'total_flow_hari' => 4820,
-                'last_service' => now()->format('Y-m-d'),
+                'pump1' => ['nm' => 'Pompa 1', 'st' => 'N/A', 'flow' => 0.0, 'pres' => 0.0, 'amp' => 0.0, 'temp_motor' => 0.0, 'run_hours' => 0],
+                'pump2' => ['nm' => 'Pompa 2', 'st' => 'N/A', 'flow' => 0.0, 'pres' => 0.0, 'amp' => 0.0, 'temp_motor' => 0.0, 'run_hours' => 0],
+                'tank_level' => 0,
+                'total_flow_hari' => 0,
+                'last_service' => '—',
             ],
             'listrik' => [
-                'total_kw' => 284.2,
-                'pf' => 0.92,
-                'freq' => 50.0,
-                'volt_r' => 220.4,
-                'volt_s' => 219.8,
-                'volt_t' => 221.2,
-                'amp_r' => 142.8,
-                'amp_s' => 140.2,
-                'amp_t' => 143.6,
-                'kwh_hari' => 1842.4,
-                'st' => 'NORMAL',
+                'total_kw' => 0.0,
+                'pf' => 0.0,
+                'freq' => 0.0,
+                'volt_r' => 0.0,
+                'volt_s' => 0.0,
+                'volt_t' => 0.0,
+                'amp_r' => 0.0,
+                'amp_s' => 0.0,
+                'amp_t' => 0.0,
+                'kwh_hari' => 0.0,
+                'st' => '—',
             ],
             'hvac' => [
-                'unit1' => ['nm' => 'AC CR1', 'st' => 'RUNNING', 'set' => 22, 'actual' => 23.1, 'amp' => 8.4],
-                'unit2' => ['nm' => 'AC CR2', 'st' => 'RUNNING', 'set' => 22, 'actual' => 23.8, 'amp' => 8.9],
-                'unit3' => ['nm' => 'AC CR3', 'st' => 'RUNNING', 'set' => 22, 'actual' => 22.8, 'amp' => 8.1],
-                'filter_st' => 'OK',
-                'next_service' => now()->addMonths(2)->format('Y-m-d'),
+                'unit1' => ['nm' => 'AC CR1', 'st' => 'N/A', 'set' => 0, 'actual' => 0.0, 'amp' => 0.0],
+                'unit2' => ['nm' => 'AC CR2', 'st' => 'N/A', 'set' => 0, 'actual' => 0.0, 'amp' => 0.0],
+                'unit3' => ['nm' => 'AC CR3', 'st' => 'N/A', 'set' => 0, 'actual' => 0.0, 'amp' => 0.0],
+                'filter_st' => '—',
+                'next_service' => '—',
             ],
         ];
     }

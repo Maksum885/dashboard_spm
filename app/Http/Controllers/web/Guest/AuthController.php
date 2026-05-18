@@ -1,20 +1,20 @@
 <?php
 
-namespace App\Http\Controllers\Web;
+namespace App\Http\Controllers\Web\Guest;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\View\View;
-use Illuminate\Http\RedirectResponse;
 
 class AuthController extends Controller
 {
     public function showLoginForm(): View
     {
-        return view('auth.login');
+        return view('guest.login');
     }
 
     public function login(Request $request): RedirectResponse
@@ -30,7 +30,7 @@ class AuthController extends Controller
             ->first();
 
         if (! $user || ! Hash::check($credentials['password'], $user->password)) {
-            return back()->withErrors(['email' => 'Email atau password salah.'])->onlyInput('email');
+            return back()->withErrors(['email' => 'Invalid email or password.'])->onlyInput('email');
         }
 
         $user->tokens()->delete();

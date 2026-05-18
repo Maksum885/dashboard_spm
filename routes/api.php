@@ -1,13 +1,13 @@
 <?php
 
-use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\ActivityLogController;
+use App\Http\Controllers\Api\Admin\UserController as AdminUserController;
 use App\Http\Controllers\Api\AlarmController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\PlcController;
 use App\Http\Controllers\Api\RoomController;
-use App\Http\Controllers\Api\UserController;
+use Illuminate\Support\Facades\Route;
 
 Route::post('/login', [AuthController::class, 'login']);
 
@@ -42,11 +42,11 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::middleware('role:admin')->group(function () {
         Route::get('/plc/all/data', [PlcController::class, 'getAllRoomsData']);
 
-        Route::get('/admin/users', [UserController::class, 'index']);
-        Route::post('/admin/users', [UserController::class, 'store']);
-        Route::put('/admin/users/{id}', [UserController::class, 'update']);
-        Route::delete('/admin/users/{id}', [UserController::class, 'destroy']);
-        Route::patch('/admin/users/{id}/toggle', [UserController::class, 'toggle']);
+        Route::get('/admin/users', [AdminUserController::class, 'index']);
+        Route::post('/admin/users', [AdminUserController::class, 'store']);
+        Route::put('/admin/users/{id}', [AdminUserController::class, 'update']);
+        Route::delete('/admin/users/{id}', [AdminUserController::class, 'destroy']);
+        Route::patch('/admin/users/{id}/toggle', [AdminUserController::class, 'toggle']);
     });
 });
 

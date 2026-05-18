@@ -3,6 +3,18 @@ import { DUMMY_CONTROL_ROOMS, DUMMY_UTILITIES } from '../data/dummy.js';
 
 const clone = (v) => structuredClone(v);
 
+function useDummyDashboard() {
+    return import.meta.env.VITE_DASHBOARD_USE_DUMMY === 'true';
+}
+
+/** Tanpa dummy: tidak ada data palsu saat API gagal / belum login. */
+function emptyDashboardPayload() {
+    return {
+        controlRooms: {},
+        utilities: {},
+    };
+}
+
 /**
  * Normalizes API JSON into the shape the dashboard UI expects.
  *
@@ -26,12 +38,13 @@ export function normalizeDashboardPayload(raw) {
 }
 
 /**
- * Ambil payload dashboard: prioritas token Sanctum → `/api/dashboard`,
- * fallback env `VITE_DASHBOARD_API_URL` + `/api/dashboard` (axios opsional),
- * lalu dummy jika tidak ada auth / URL.
+ * Ambil payload dashboard:
+ * - Jika `VITE_DASHBOARD_USE_DUMMY=true` → data demo dari `dummy.js` (hanya untuk uji UI).
+ * - Selain itu → `/api/dashboard` (Sanctum), lalu opsional `VITE_DASHBOARD_API_URL` + axios.
+ * - Jika semua gagal → payload kosong (bukan dummy).
  */
 export async function getDashboardData() {
-    if (import.meta.env.VITE_DASHBOARD_USE_DUMMY === 'true') {
+    if (useDummyDashboard()) {
         return {
             controlRooms: clone(DUMMY_CONTROL_ROOMS),
             utilities: clone(DUMMY_UTILITIES),
@@ -65,10 +78,7 @@ export async function getDashboardData() {
         }
     }
 
-    return {
-        controlRooms: clone(DUMMY_CONTROL_ROOMS),
-        utilities: clone(DUMMY_UTILITIES),
-    };
+    return emptyDashboardPayload();
 }
 
 export const PlcAPI = {

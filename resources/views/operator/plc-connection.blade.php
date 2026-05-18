@@ -4,9 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Settings — SPM SCADA</title>
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css">
-<link href="https://fonts.googleapis.com/css2?family=Titillium+Web:wght@400;600;700&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet">
-@vite(['resources/css/dashboard.css'])
+@vite(['resources/css/dashboard.css', 'resources/js/profile-menu.js'])
 @if(session('api_token'))
 <script>
   sessionStorage.setItem('spm_auth_token', @json(session('api_token')));
@@ -18,12 +16,9 @@
   <a href="{{ route('dashboard') }}" class="dash-brand logo settings-app__brand" title="Back to dashboard">
     <img src="{{ asset('images/logospm1.png') }}" alt="SPM Oil &amp; Gas" class="logo-img">
   </a>
-  <div class="hdr-r dash-topbar-actions">
+  <div class="hdr-r dash-topbar-actions settings-app__hdr-actions">
     <a href="{{ route('dashboard') }}" class="hdr-btn" title="Dashboard"><i class="ti ti-layout-dashboard"></i><span class="hdr-btn-lbl">Dashboard</span></a>
-    <form method="POST" action="{{ route('logout') }}" class="hdr-logout-form" onsubmit="sessionStorage.removeItem('spm_auth_token')">
-      @csrf
-      <button type="submit" class="hdr-btn dash-btn-out" title="Logout"><i class="ti ti-logout-2"></i><span class="hdr-btn-lbl">Logout</span></button>
-    </form>
+    @include('partials.profile-menu')
   </div>
 </header>
 
@@ -63,7 +58,7 @@
           </h3>
           <div class="settings-cards-grid">
             @foreach ($group as $d)
-              @include('settings.partials.plc-device-card', ['d' => $d, 'highlightRoomId' => $highlightRoomId])
+              @include('operator.partials.plc-device-card', ['d' => $d, 'highlightRoomId' => $highlightRoomId])
             @endforeach
           </div>
         @endif

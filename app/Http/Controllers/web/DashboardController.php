@@ -8,10 +8,10 @@ use Illuminate\Http\Request;
 class DashboardController extends Controller
 {
     /**
-     * Halaman utama SCADA — token API (Sanctum) bisa di-flash sekali setelah login web.
+     * Halaman utama — token API (Sanctum) bisa di-flash sekali setelah login web.
      */
     public function index(Request $request)
     {
-        return view('dashboard');
+        return view('shared.dashboard');
     }
 }

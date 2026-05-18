@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Http\Controllers\Web;
+namespace App\Http\Controllers\Web\Operator;
 
 use App\Http\Controllers\Controller;
 use App\Models\PlcDevice;
@@ -54,7 +54,7 @@ class PlcConnectionController extends Controller
 
         $highlightRoomId = $request->query('testing_room_id');
 
-        return view('settings.plc-connection', [
+        return view('operator.plc-connection', [
             'devices' => $devices,
             'devicesByKind' => $devicesByKind,
             'highlightRoomId' => $highlightRoomId !== null && $highlightRoomId !== ''

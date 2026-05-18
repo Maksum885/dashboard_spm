@@ -19,7 +19,11 @@ class RoleMiddleware
         }
 
         if (! $user || ! in_array($user->role, $allowed, true)) {
-            return response()->json(['message' => 'Forbidden'], 403);
+            if ($request->expectsJson()) {
+                return response()->json(['message' => 'Forbidden'], 403);
+            }
+
+            abort(403, 'Forbidden');
         }
 
         return $next($request);

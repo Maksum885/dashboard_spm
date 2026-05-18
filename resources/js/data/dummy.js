@@ -1,6 +1,9 @@
 /**
- * Payload dummy — selaraskan dengan API PostgreSQL lewat normalizeDashboardPayload().
+ * Payload dummy — selaraskan dengan API lewat normalizeDashboardPayload().
  * Field tambahan per ruangan: roof_state, mode, door_lock, dual_motor, alarm_*, events.
+ *
+ * Dipakai hanya jika `.env` berisi VITE_DASHBOARD_USE_DUMMY=true (lalu npm run dev/build).
+ * Default: mati — data dari /api/dashboard + PLC, bukan file ini.
  */
 export const DUMMY_CONTROL_ROOMS = {
     cr1: {
@@ -79,7 +82,7 @@ export const DUMMY_CONTROL_ROOMS = {
                 door_lock: 'locked',
                 dual_motor: true,
                 alarm_emergency: true,
-                alarm_pressure_in: true,
+                alarm_pressure_in: false,
                 alarm_left_motor: true,
                 alarm_right_motor: true,
                 alarm_motor: false,
@@ -119,7 +122,7 @@ export const DUMMY_CONTROL_ROOMS = {
                 door_lock: 'unlocked',
                 dual_motor: false,
                 alarm_emergency: true,
-                alarm_pressure_in: true,
+                alarm_pressure_in: false,
                 alarm_left_motor: false,
                 alarm_right_motor: false,
                 alarm_motor: true,
@@ -176,7 +179,7 @@ export const DUMMY_CONTROL_ROOMS = {
                 door_lock: 'locked',
                 dual_motor: false,
                 alarm_emergency: true,
-                alarm_pressure_in: true,
+                alarm_pressure_in: false,
                 alarm_motor: true,
                 alarm_left_motor: false,
                 alarm_right_motor: false,
@@ -215,7 +218,7 @@ export const DUMMY_CONTROL_ROOMS = {
                 door_lock: 'locked',
                 dual_motor: false,
                 alarm_emergency: true,
-                alarm_pressure_in: true,
+                alarm_pressure_in: false,
                 alarm_motor: false,
                 alarm_left_motor: false,
                 alarm_right_motor: false,
@@ -267,7 +270,7 @@ export const DUMMY_CONTROL_ROOMS = {
                 door_lock: 'locked',
                 dual_motor: false,
                 alarm_emergency: true,
-                alarm_pressure_in: true,
+                alarm_pressure_in: false,
                 alarm_motor: true,
                 alarm_left_motor: false,
                 alarm_right_motor: false,
@@ -305,7 +308,7 @@ export const DUMMY_CONTROL_ROOMS = {
                 door_lock: 'unlocked',
                 dual_motor: false,
                 alarm_emergency: true,
-                alarm_pressure_in: true,
+                alarm_pressure_in: false,
                 alarm_motor: false,
                 alarm_left_motor: false,
                 alarm_right_motor: false,
@@ -359,7 +362,7 @@ export const DUMMY_CONTROL_ROOMS = {
                 door_lock: 'locked',
                 dual_motor: true,
                 alarm_emergency: true,
-                alarm_pressure_in: true,
+                alarm_pressure_in: false,
                 alarm_left_motor: true,
                 alarm_right_motor: true,
                 alarm_motor: false,
@@ -398,7 +401,7 @@ export const DUMMY_CONTROL_ROOMS = {
                 door_lock: 'unlocked',
                 dual_motor: false,
                 alarm_emergency: true,
-                alarm_pressure_in: true,
+                alarm_pressure_in: false,
                 alarm_motor: false,
                 alarm_left_motor: false,
                 alarm_right_motor: false,
@@ -435,7 +438,7 @@ export const DUMMY_CONTROL_ROOMS = {
                 door_lock: 'locked',
                 dual_motor: false,
                 alarm_emergency: true,
-                alarm_pressure_in: true,
+                alarm_pressure_in: false,
                 alarm_motor: true,
                 alarm_left_motor: false,
                 alarm_right_motor: false,
@@ -472,7 +475,7 @@ export const DUMMY_CONTROL_ROOMS = {
                 door_lock: 'locked',
                 dual_motor: false,
                 alarm_emergency: true,
-                alarm_pressure_in: true,
+                alarm_pressure_in: false,
                 alarm_motor: false,
                 alarm_left_motor: false,
                 alarm_right_motor: false,

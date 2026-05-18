@@ -3,9 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SPM SCADA</title>
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css">
-<link href="https://fonts.googleapis.com/css2?family=Titillium+Web:wght@400;600;700;900&family=Barlow+Condensed:wght@400;500;600;700&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet">
+<title>SPM Testing Bay</title>
+<link rel="icon" type="image/png" href="{{ asset('images/logospm4.png') }}">
 @vite(['resources/css/dashboard.css', 'resources/js/app.js'])
 @if(session('api_token'))
 <script>
@@ -25,14 +24,8 @@
       <img src="{{ asset('images/logospm1.png') }}" alt="SPM Oil &amp; Gas" class="logo-img">
     </div>
     <div class="hdr-r dash-topbar-actions">
-      @if(auth()->user()->role !== 'viewer')
-      <a href="{{ route('settings.plc') }}" class="hdr-btn dash-btn-settings" title="Settings"><i class="ti ti-settings"></i><span class="hdr-btn-lbl">Settings</span></a>
-      @endif
-      <form method="POST" action="{{ route('logout') }}" class="hdr-logout-form" onsubmit="sessionStorage.removeItem('spm_auth_token')">
-        @csrf
-        <button type="submit" class="hdr-btn dash-btn-out" title="Logout"><i class="ti ti-logout-2"></i><span class="hdr-btn-lbl">Logout</span></button>
-      </form>
       <div class="clk dash-clock" id="clk">00:00:00</div>
+      @include('partials.profile-menu')
       <button type="button" class="ham" onclick="toggleSidebar()"><i class="ti ti-menu-2"></i></button>
     </div>
   </header>
@@ -40,7 +33,9 @@
   <div class="dash-main">
     <aside class="dash-sidebar lsb" id="lsb">
       <div class="lscroll dash-sidebar-scroll">
-        <div class="dash-sidebar-section">Control Rooms</div>
+        <div class="dash-sidebar-section">Monitoring Area</div>
+        @if(auth()->user()->isAdmin())
+        <div class="dash-sidebar-nav dash-sidebar-nav--admin">
         <div class="cr-item active cr-item--ic" id="nav-cr1">
           <div class="cr-info" onclick="openPanel('cr1')">
             <div class="cr-name">Control Room 1</div>
@@ -67,6 +62,12 @@
           <button type="button" class="cr-expand-btn" id="exp-cr3" onclick="toggleRooms('cr3')" aria-label="Toggle rooms"><i class="ti ti-chevron-right"></i></button>
         </div>
         <div class="cr-rooms" id="rooms-cr3"></div>
+        </div>
+        @else
+        <div class="dash-sidebar-nav dash-sidebar-nav--flat">
+          <div id="rooms-flat" class="cr-rooms cr-rooms--flat open" aria-label="Daftar ruang uji"></div>
+        </div>
+        @endif
 
         <div class="dash-alarm-block">
           <div class="alarm-header dash-alarm-header">
@@ -74,17 +75,8 @@
             <div class="alarm-count" id="al-count">0</div>
           </div>
           <div class="alarm-list dash-alarm-list" id="dash-alarm-scroll">
-            <div class="al-subsection al-subsection--inline">
-              <div class="al-heading">Alarm</div>
-              <div id="al-list">
-                <div class="al-empty-msg">No active alarms</div>
-              </div>
-            </div>
-            <div class="al-subsection al-subsection--inline">
-              <div class="al-heading">Area Alerts</div>
-              <div id="area-list">
-                <div class="al-empty-msg">No area alerts</div>
-              </div>
+            <div id="al-list" class="dash-alarm-list-inner">
+              <div class="al-empty-msg">No active alarms</div>
             </div>
           </div>
         </div>
@@ -109,7 +101,6 @@
         <div class="rp-hdr-row rp-hdr-row--detail">
           <div class="rp-detail-head">
             <h2 class="rp-title" id="rp-title">—</h2>
-            <div class="rp-upd-wrap">Upd: <span class="rp-upd-time" id="rp-upd-time">—</span></div>
           </div>
           <div class="rp-hdr-actions">
             <div id="rp-plc-strip" class="rp-plc-strip is-hidden" aria-live="polite"></div>

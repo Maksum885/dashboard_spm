@@ -44,8 +44,9 @@ function updateRoomPlcStrip(room) {
     if (u && u.role !== "viewer" && room?.api_room_id) {
         el.classList.remove("is-hidden");
         const st = room.plc_link_status || "offline";
-        const stLabel = st === "online" ? "PLC online" : "PLC offline / no data";
-        el.innerHTML = `<a class="rp-plc-strip__link" href="/settings/plc?testing_room_id=${room.api_room_id}"><i class="ti ti-settings"></i> Settings <span class="rp-plc-strip__id">· Room #${room.api_room_id} · ${stLabel}</span></a>`;
+        const stLabel =
+            st === "online" ? "PLC online" : st === "error" ? "PLC error" : "PLC offline";
+        el.innerHTML = `<a class="rp-plc-strip__link" href="/settings/plc?testing_room_id=${room.api_room_id}"><i class="ti ti-settings"></i> Settings</a><span class="rp-plc-strip__id"> · ${stLabel}</span>`;
     } else {
         el.classList.add("is-hidden");
         el.innerHTML = "";
@@ -61,13 +62,18 @@ function bindPlcEchoForRoom(room) {
     const plcEchoChannel = window.Echo.channel(ch);
     plcEchoChannel.listen(".PlcRoomUpdated", (payload) => {
         const rid = payload?.room_id;
-        const snap = payload?.data;
-        if (!rid || !snap || typeof snap !== "object") return;
+        if (!rid) return;
 
         const target = findRoomByApiId(rid) || (ui.curRoomId ? findRoom(ui.curRoomId) : null);
         if (!target) return;
 
-        applySnapshotToRoom(target, snap);
+        syncRoomPlcLinkFromPollPayload(target, payload);
+
+        const snap = payload?.data;
+        const pollOk = (payload?.status || "") === "success";
+        if (!pollOk || !snap || typeof snap !== "object") clearLiveSnapshotFields(target);
+        else applySnapshotToRoom(target, snap);
+
         buildSidebarRooms();
         updateAlarmSidebar();
 
@@ -98,7 +104,12 @@ export function isRoomActivelyTesting(r) {
 
 function sidebarRoomDotClass(r) {
     if ((r.mode || "") === "MAINTENANCE") return "room-dot-st--mt";
-    if (r.alarm_emergency || r.alarm_left_motor || r.alarm_right_motor)
+    if (
+        r.alarm_emergency ||
+        r.alarm_motor ||
+        r.alarm_left_motor ||
+        r.alarm_right_motor
+    )
         return "room-dot-st--wa";
     if ((r.plc_link_status || "") === "online") return "room-dot-st--on";
     return "room-dot-st--off";
@@ -157,14 +168,8 @@ function roofPositionBadgeStyle(r) {
     return "background:#e0f2fe;color:#075985";
 }
 
-function setRoomPanelUpdated() {
-    const el = document.getElementById("rp-upd-time");
-    if (el) el.textContent = new Date().toLocaleTimeString("en-GB");
-}
-
 export function renderRoomPanelPanes(r, crId) {
     if (!r) return;
-    setRoomPanelUpdated();
     renderPaneOverview(r, crId);
     renderPaneLog(r);
 }
@@ -196,7 +201,7 @@ function renderPaneOverview(r, crId) {
     const u = typeof window.__SCADA_USER__ !== "undefined" ? window.__SCADA_USER__ : null;
     const plcLink =
         u && u.role !== "viewer" && r.api_room_id
-            ? `<a class="rp-plc-strip__link" style="margin-bottom:8px;display:inline-flex" href="/settings/plc?testing_room_id=${r.api_room_id}"><i class="ti ti-settings"></i> Open settings for this room</a>`
+            ? `<a class="rp-plc-strip__link" style="margin-bottom:8px;display:inline-flex" href="/settings/plc?testing_room_id=${r.api_room_id}"><i class="ti ti-settings"></i> Settings</a>`
             : "";
     const wideOn = ui.cameraWide ? "true" : "false";
     const wideIco = ui.cameraWide ? "ti ti-arrows-minimize" : "ti ti-arrows-maximize";
@@ -218,35 +223,35 @@ function renderPaneOverview(r, crId) {
     document.getElementById("pane-o").innerHTML = `
   ${plcLink}
   <div class="cam-toolbar-v2">
-    <div class="section-label cam-toolbar-v2__title">Cameras</div>
+    <div class="section-label cam-toolbar-v2__title">Kamera</div>
     <button type="button" class="btn-cam-wide${ui.cameraWide ? " is-active" : ""}" id="btn-cam-wide" onclick="toggleCameraWide()" aria-pressed="${wideOn}" title="Use map area for larger video (e.g. computer vision)">
       <i class="${wideIco}" aria-hidden="true"></i> Wide view
     </button>
   </div>
   <div class="cam-grid-v2">
-    <div class="cam-v2"><i class="ti ti-video-off" aria-hidden="true"></i><span class="cam-v2-lbl">CAM 1 — Interior</span><span class="cam-live"><span class="cam-live-dot"></span>LIVE</span></div>
-    <div class="cam-v2"><i class="ti ti-video-off" aria-hidden="true"></i><span class="cam-v2-lbl">CAM 2 — Roof</span><span class="cam-live"><span class="cam-live-dot"></span>LIVE</span></div>
+    <div class="cam-v2"><i class="ti ti-video-off" aria-hidden="true"></i><span class="cam-v2-lbl">Kamera 1</span><span class="cam-live"><span class="cam-live-dot"></span>LIVE</span></div>
+    <div class="cam-v2"><i class="ti ti-video-off" aria-hidden="true"></i><span class="cam-v2-lbl">Kamera 2</span><span class="cam-live"><span class="cam-live-dot"></span>LIVE</span></div>
   </div>
   <div class="rp-overview-block">
     <div class="section-label">Pressure</div>
-    <div class="sensor-grid-v2">
-      <div class="sensor-card-v2">
-        <div class="sn">Pressure 1 <span class="reg-addr">#40011</span></div>
-        <div class="sv">${fmtRegBar(p1)}<span class="su"> bar</span></div>
-        <div class="sensor-badge-v2 sb-ok">Normal</div>
-      </div>
-      <div class="sensor-card-v2">
-        <div class="sn">Pressure 2 <span class="reg-addr">#40012</span></div>
-        <div class="sv">${fmtRegBar(p2)}<span class="su"> bar</span></div>
-        <div class="sensor-badge-v2 ${hi ? "sb-warn" : "sb-ok"}">${hi ? "High" : "Normal"}</div>
-      </div>
-    </div>
-    <div class="sensor-card-v2" style="margin-top:8px">
-      <div class="sn">Inlet pressure <span class="reg-addr">#40001</span></div>
+    <div class="sensor-card-v2" style="margin-bottom:8px">
+      <div class="sn">Inlet pressure</div>
       <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
         <div class="sv" style="font-size:18px">${fmtRegBar(r.pres_in)}<span class="su"> bar</span></div>
         <div class="pres-in-bar" style="min-width:100px;flex:1"><i style="width:${presInBar(r)}%"></i></div>
         <span style="font-size:10px;color:#6b7280">10 bar max</span>
+      </div>
+    </div>
+    <div class="sensor-grid-v2">
+      <div class="sensor-card-v2">
+        <div class="sn">Pressure 1</div>
+        <div class="sv">${fmtRegBar(p1)}<span class="su"> bar</span></div>
+        <div class="sensor-badge-v2 sb-ok">Normal</div>
+      </div>
+      <div class="sensor-card-v2">
+        <div class="sn">Pressure 2</div>
+        <div class="sv">${fmtRegBar(p2)}<span class="su"> bar</span></div>
+        <div class="sensor-badge-v2 ${hi ? "sb-warn" : "sb-ok"}">${hi ? "High" : "Normal"}</div>
       </div>
     </div>
   </div>
@@ -258,11 +263,11 @@ function renderPaneOverview(r, crId) {
         <span class="st-badge-v2" style="${stStyle}">${mv.t}</span>
       </div>
       <div class="roof-row-v2">
-        <span style="font-size:11px;color:#6b7280">Motion <span class="reg-addr">#40006/#40007</span></span>
+        <span style="font-size:11px;color:#6b7280">Motion</span>
         <div class="roof-anim-bar"><div class="roof-anim-fill ${roofAnimFillClass(r)}" style="width:${roofAnimWidthPct(r)}%"></div></div>
       </div>
       <div class="roof-row-v2">
-        <span style="font-size:11px;color:#6b7280">Position <span class="reg-addr">#40004/#40005</span></span>
+        <span style="font-size:11px;color:#6b7280">Position</span>
         <span class="st-badge-v2" style="${roofPositionBadgeStyle(r)}">${roofPositionLabel(r)}</span>
       </div>
     </div>
@@ -271,19 +276,19 @@ function renderPaneOverview(r, crId) {
     <div class="section-label">Operational status</div>
     <div class="roof-card-v2">
       <div class="roof-row-v2">
-        <span style="font-size:11px;color:#6b7280">Panel mode <span class="reg-addr">#40003</span></span>
+        <span style="font-size:11px;color:#6b7280">Panel mode</span>
         <span class="st-badge-v2" style="${maint ? "background:#ede9fe;color:#7c3aed" : "background:#dbeafe;color:#1e40af"}">${maint ? "Maintenance" : "Auto"}</span>
       </div>
       <div class="roof-row-v2">
-        <span style="font-size:11px;color:#6b7280">Test status <span class="reg-addr">#40009</span></span>
+        <span style="font-size:11px;color:#6b7280">Test status</span>
         <span class="st-badge-v2" style="${testing ? "background:#dcfce7;color:#15803d" : "background:#f3f4f6;color:#374151"}">${testing ? "Testing" : "Idle / standby"}</span>
       </div>
       <div class="roof-row-v2">
-        <span style="font-size:11px;color:#6b7280">Access door <span class="reg-addr">#40008</span></span>
+        <span style="font-size:11px;color:#6b7280">Access door</span>
         <span class="st-badge-v2" style="${locked ? "background:#fee2e2;color:#b91c1c" : "background:#dcfce7;color:#15803d"}"><i class="ti ${locked ? "ti-lock" : "ti-lock-open"}"></i> ${locked ? "Locked" : "Unlocked"}</span>
       </div>
       <div class="roof-row-v2">
-        <span style="font-size:11px;color:#6b7280">Emergency <span class="reg-addr">#40002</span></span>
+        <span style="font-size:11px;color:#6b7280">Emergency</span>
         <span class="st-badge-v2" style="${emerg ? "background:#fee2e2;color:#b91c1c" : "background:#f0fdf4;color:#15803d"}">${emerg ? "ALARM" : "Normal"}</span>
       </div>
     </div>
@@ -325,16 +330,28 @@ function renderPaneLog(r) {
 
 function renderRoomAlarmSection(r) {
     const rows = [];
-    if (r.alarm_left_motor)
+    if (r.alarm_emergency)
         rows.push({
-            t: "LEFT MOTOR FAIL",
+            t: "EMERGENCY",
             sub: r.nm,
         });
-    if (r.alarm_right_motor)
+    if (r.dual_motor) {
+        if (r.alarm_left_motor)
+            rows.push({
+                t: "LEFT MOTOR FAIL",
+                sub: r.nm,
+            });
+        if (r.alarm_right_motor)
+            rows.push({
+                t: "RIGHT MOTOR FAIL",
+                sub: r.nm,
+            });
+    } else if (r.alarm_motor) {
         rows.push({
-            t: "RIGHT MOTOR FAIL",
+            t: "MOTOR FAIL",
             sub: r.nm,
         });
+    }
     if (!rows.length)
         return `<div class="section-label" style="margin-top:10px">Room alarms</div><div style="font-size:11px;color:#6b7280">No active alarms in this room.</div>`;
     let h = `<div class="section-label" style="margin-top:10px">Room alarms</div>`;
@@ -352,14 +369,15 @@ export function updateCenterStatusBar() {
     /* Bottom status bar removed from layout */
 }
 
-export function buildSidebarRooms() {
-    Object.entries(store.data).forEach(([crId, d]) => {
-        const cont = document.getElementById(`rooms-${crId}`);
-        if (!cont) return;
-        cont.innerHTML = d.rooms
-            .map((r) => {
-                ROOM_TO_CR[r.id] = crId;
-                return `<div class="room-item room-item--v2" id="ri-${r.id}" onclick="openRoomPanel('${r.id}','${crId}')">
+function sortRoomsByDisplayName(rooms) {
+    return [...rooms].sort((a, b) =>
+        (a.nm || "").localeCompare(b.nm || "", undefined, { numeric: true, sensitivity: "base" }),
+    );
+}
+
+function roomSidebarRowHtml(r, crId) {
+    ROOM_TO_CR[r.id] = crId;
+    return `<div class="room-item room-item--v2" id="ri-${r.id}" onclick="openRoomPanel('${r.id}','${crId}')">
         <div class="room-dot-st ${sidebarRoomDotClass(r)}"></div>
         <div class="room-v2-body">
           <div class="room-v2-top">
@@ -368,7 +386,28 @@ export function buildSidebarRooms() {
           </div>
         </div>
       </div>`;
-            })
+}
+
+export function buildSidebarRooms() {
+    const flatEl = document.getElementById("rooms-flat");
+    if (flatEl) {
+        const pairs = [];
+        Object.entries(store.data).forEach(([crId, d]) => {
+            (d.rooms || []).forEach((r) => pairs.push({ r, crId }));
+        });
+        pairs.sort((a, b) =>
+            (a.r.nm || "").localeCompare(b.r.nm || "", undefined, { numeric: true, sensitivity: "base" }),
+        );
+        flatEl.innerHTML = pairs.map(({ r, crId }) => roomSidebarRowHtml(r, crId)).join("");
+        updateCenterStatusBar();
+        return;
+    }
+
+    Object.entries(store.data).forEach(([crId, d]) => {
+        const cont = document.getElementById(`rooms-${crId}`);
+        if (!cont) return;
+        cont.innerHTML = sortRoomsByDisplayName(d.rooms || [])
+            .map((r) => roomSidebarRowHtml(r, crId))
             .join("");
     });
     updateCenterStatusBar();
@@ -377,10 +416,13 @@ export function buildSidebarRooms() {
 export function toggleRooms(crId) {
     const cont = document.getElementById(`rooms-${crId}`);
     const btn = document.getElementById(`exp-${crId}`);
+    if (!cont || !btn) return;
     const isOpen = cont.classList.contains("open");
     ["cr1", "cr2", "cr3"].forEach((k) => {
-        document.getElementById(`rooms-${k}`).classList.remove("open");
-        document.getElementById(`exp-${k}`).classList.remove("open");
+        const c = document.getElementById(`rooms-${k}`);
+        const b = document.getElementById(`exp-${k}`);
+        if (c) c.classList.remove("open");
+        if (b) b.classList.remove("open");
     });
     const willExpand = !isOpen;
     if (willExpand) {
@@ -402,13 +444,15 @@ export function toggleRooms(crId) {
         ui.panelMode = "none";
         document.getElementById("rpanel").classList.remove("open");
         document.querySelectorAll(".room-item").forEach((el) => el.classList.remove("active"));
-        ["cr1", "cr2", "cr3"].forEach((k) =>
-            document.getElementById(`nav-${k}`).classList.toggle("active", k === crId),
-        );
+        ["cr1", "cr2", "cr3"].forEach((k) => {
+            const nav = document.getElementById(`nav-${k}`);
+            if (nav) nav.classList.toggle("active", k === crId);
+        });
     } else {
-        ["cr1", "cr2", "cr3"].forEach((k) =>
-            document.getElementById(`nav-${k}`).classList.remove("active"),
-        );
+        ["cr1", "cr2", "cr3"].forEach((k) => {
+            const nav = document.getElementById(`nav-${k}`);
+            if (nav) nav.classList.remove("active");
+        });
     }
 }
 
@@ -463,10 +507,12 @@ export function openRoomPanel(roomId, crId) {
     swTab("o");
     rp.classList.add("open");
 
-    ["cr1", "cr2", "cr3"].forEach((k) =>
-        document.getElementById(`nav-${k}`).classList.remove("active"),
-    );
-    document.getElementById(`nav-${crId}`).classList.add("active");
+    ["cr1", "cr2", "cr3"].forEach((k) => {
+        const nav = document.getElementById(`nav-${k}`);
+        if (nav) nav.classList.remove("active");
+    });
+    const navCr = document.getElementById(`nav-${crId}`);
+    if (navCr) navCr.classList.add("active");
     document
         .querySelectorAll(".room-item")
         .forEach((el) => el.classList.remove("active"));
@@ -475,8 +521,10 @@ export function openRoomPanel(roomId, crId) {
 
     const cont = document.getElementById(`rooms-${crId}`);
     const btn = document.getElementById(`exp-${crId}`);
-    cont.classList.add("open");
-    btn.classList.add("open");
+    if (cont && btn) {
+        cont.classList.add("open");
+        btn.classList.add("open");
+    }
 
     bindPlcEchoForRoom(r);
 
@@ -507,8 +555,6 @@ export function closePanel() {
     stopCamera();
     const tEl = document.getElementById("rp-title");
     if (tEl) tEl.textContent = "—";
-    const uEl = document.getElementById("rp-upd-time");
-    if (uEl) uEl.textContent = "—";
     document.getElementById("rpanel").classList.remove("open");
     ui.curId = null;
     ui.curRoomId = null;
@@ -517,9 +563,10 @@ export function closePanel() {
         clearInterval(ui.lv);
         ui.lv = null;
     }
-    ["cr1", "cr2", "cr3"].forEach((k) =>
-        document.getElementById(`nav-${k}`).classList.remove("active"),
-    );
+    ["cr1", "cr2", "cr3"].forEach((k) => {
+        const nav = document.getElementById(`nav-${k}`);
+        if (nav) nav.classList.remove("active");
+    });
     document.querySelectorAll(".room-item").forEach((el) => el.classList.remove("active"));
 }
 
@@ -596,7 +643,7 @@ function pushAlarm(out, lv, nm, sub, crId, roomId) {
     out.push({ lv, nm, sub, crId, roomId, time: getNow() });
 }
 
-/** Alarm sidebar: hanya motor fail. Emergency dan pressure in ditampilkan di area alerts terpisah. */
+/** Motor fail (PLC / simulasi). */
 export function getSidebarAlarms() {
     const out = [];
     for (const [crId, d] of Object.entries(store.data)) {
@@ -615,18 +662,21 @@ export function getSidebarAlarms() {
     return out;
 }
 
-export function getSidebarAreaAlerts() {
+/** Emergency dari holding register #40002 (`alarm_alert`). */
+function getSidebarEmergencyAlerts() {
     const out = [];
     for (const [crId, d] of Object.entries(store.data)) {
         for (const r of d.rooms) {
-            const nm = `${r.nm}`;
-            if (r.alarm_emergency)
-                pushAlarm(out, "cr", nm, "EMERGENCY", crId, r.id);
-            if (r.alarm_pressure_in)
-                pushAlarm(out, "wa", nm, "PRESSURE IN", crId, r.id);
+            if ((r.plc_link_status || "") === "online" && r.alarm_emergency)
+                pushAlarm(out, "cr", `${r.nm}`, "EMERGENCY", crId, r.id);
         }
     }
     return out;
+}
+
+/** Satu daftar sidebar: emergency dulu, lalu motor. */
+export function getSidebarCombinedAlerts() {
+    return [...getSidebarEmergencyAlerts(), ...getSidebarAlarms()];
 }
 
 export function getNow() {
@@ -637,21 +687,24 @@ export function getNow() {
 }
 
 export function updateAlarmSidebar() {
-    const allAl = getSidebarAlarms();
-    const areaAlerts = getSidebarAreaAlerts();
-    const count = allAl.length;
+    const combined = getSidebarCombinedAlerts();
+    const count = combined.length;
     const ac = document.getElementById("al-count");
     if (ac) {
         ac.textContent = String(count);
         ac.className =
             "alarm-count " +
-            (count > 0 ? (allAl.some((a) => a.lv === "cr") ? "" : "wa") : "ok");
+            (count > 0
+                ? combined.some((a) => a.lv === "cr")
+                    ? ""
+                    : "wa"
+                : "ok");
     }
     const list = document.getElementById("al-list");
     if (!count) {
-        list.innerHTML = `<div class="al-empty-row"><i class="ti ti-circle-check"></i>No alarms</div>`;
+        list.innerHTML = `<div class="al-empty-row"><i class="ti ti-circle-check"></i>No active alarms</div>`;
     } else {
-        list.innerHTML = allAl
+        list.innerHTML = combined
             .map(
                 (a) => `
       <div class="al-row" onclick="openRoomPanel('${a.roomId}','${a.crId}')">
@@ -665,26 +718,10 @@ export function updateAlarmSidebar() {
 
     updateCenterStatusBar();
 
-    const areaList = document.getElementById("area-list");
-    if (!areaAlerts.length) {
-        areaList.innerHTML = `<div class="al-empty-row"><i class="ti ti-circle-check"></i>No area alerts</div>`;
-    } else {
-        areaList.innerHTML = areaAlerts
-            .map(
-                (a) => `
-      <div class="al-row" onclick="openRoomPanel('${a.roomId}','${a.crId}')">
-        <div class="al-bar ${a.lv}"></div>
-        <div class="al-txt"><div class="al-name">${a.nm}</div><div class="al-sub">${a.sub}</div></div>
-        <div class="al-time">${a.time}</div>
-      </div>`,
-            )
-            .join("");
-    }
-
     document.getElementById("hkpi-alarm").textContent = count;
     document.getElementById("hkpi-alarm-dot").style.background =
         count > 0
-            ? allAl.some((a) => a.lv === "cr")
+            ? combined.some((a) => a.lv === "cr")
                 ? "var(--cr)"
                 : "var(--wa)"
             : "var(--ok)";
@@ -703,44 +740,10 @@ export function updateUtilSidebar() {
         el.textContent = `${store.util.listrik.total_kw.toFixed(0)} kW`;
 }
 
-export function tickRoom(id) {
-    const d = store.data[id];
-    if (d.line_pressure != null) {
-        d.line_pressure = +(
-            d.line_pressure +
-            (Math.random() - 0.5) * 0.04
-        ).toFixed(2);
-    }
-    d.rooms.forEach((r) => {
-        if (r.tp === "TEST CELL") {
-            if (r.pres_bbm != null)
-                r.pres_bbm = +(
-                    r.pres_bbm +
-                    (Math.random() - 0.5) * 0.06
-                ).toFixed(2);
-        }
-        if (r.tp === "TEST PIT" && r.max_st === "RUNNING") {
-            if (r.test_pressure < r.target_pressure)
-                r.test_pressure = +Math.min(
-                    r.target_pressure,
-                    r.test_pressure + r.pressure_rate * 0.05,
-                ).toFixed(1);
-            r.max_outlet = r.test_pressure;
-        }
-    });
-}
+/** Dulu memuat animasi angka acak untuk mode dummy; sekarang tidak mengubah data (hindari “random” di UI). */
+export function tickRoom() {}
 
-export function tickUtil() {
-    if (!store.util?.pam) return;
-    store.util.pam.pump1.flow = +(
-        store.util.pam.pump1.flow +
-        (Math.random() - 0.5) * 2
-    ).toFixed(1);
-    store.util.listrik.total_kw = +(
-        store.util.listrik.total_kw +
-        (Math.random() - 0.5) * 3
-    ).toFixed(1);
-}
+export function tickUtil() {}
 
 function extractSnapshotValue(snapshot, keys, fallback = null) {
     for (const key of keys) {
@@ -752,8 +755,28 @@ function extractSnapshotValue(snapshot, keys, fallback = null) {
     return fallback;
 }
 
+/** Hentikan bit emergency / tekanan dari snapshot cache bila tidak ada data baru dari PLC. */
+function clearLiveSnapshotFields(room) {
+    room.alarm_emergency = false;
+    room.alarm_pressure_in = false;
+    room.pres_in = 0;
+    room.pres_2 = 0;
+    if (room.tp === "TEST PIT") room.test_pressure = 0;
+    else room.pres_bbm = 0;
+}
+
+/** Samakan dengan webhook: `success` → online; selain itu jangan percaya register di cache. */
+function syncRoomPlcLinkFromPollPayload(room, payload) {
+    const s = payload?.status;
+    if (s === "success") room.plc_link_status = "online";
+    else if (s === "error") room.plc_link_status = "error";
+    else if (s === "no_data" || s === "offline" || s === "timeout" || s) room.plc_link_status = "offline";
+}
+
 function applySnapshotToRoom(room, snapshot) {
     if (!snapshot || typeof snapshot !== "object") return;
+
+    const plcLive = (room.plc_link_status || "") === "online";
 
     const rawIn = Number(extractSnapshotValue(snapshot, ["40001", "tekanan_masuk", "line_pressure"], NaN));
     const processPressure = Number(extractSnapshotValue(snapshot, ["40011", "pressure_1"], NaN));
@@ -795,8 +818,9 @@ function applySnapshotToRoom(room, snapshot) {
     else if (roofClosed) room.roof_state = "CLOSE";
     else if (!roofOpenBit && !roofClosed) room.roof_state = room.roof_state || "CLOSE";
 
-    room.alarm_emergency = alarmAlert;
-    room.alarm_pressure_in = alarmAlert;
+    /* Hanya percaya #40002 jika ruang bertanda PLC online (hindari cache lama saat putus). */
+    room.alarm_emergency = plcLive && alarmAlert;
+    room.alarm_pressure_in = false;
     room.mode = maintenance ? "MAINTENANCE" : "AUTO";
     room.door_lock = doorLocked ? "locked" : "unlocked";
     room.phase = testingOn ? "RUNNING" : "STANDBY";
@@ -810,9 +834,17 @@ async function refreshCurrentRoomFromApi() {
     isRefreshingRoom = true;
     try {
         const payload = await PlcAPI.getRoomData(room.api_room_id);
-        if (payload?.data) applySnapshotToRoom(room, payload.data);
+        if (payload && typeof payload === "object") syncRoomPlcLinkFromPollPayload(room, payload);
+
+        if (payload?.data && typeof payload.data === "object" && payload.status === "success") {
+            applySnapshotToRoom(room, payload.data);
+        } else {
+            clearLiveSnapshotFields(room);
+        }
     } catch (err) {
         console.warn("[Realtime] room polling gagal:", err?.message || err);
+        room.alarm_emergency = false;
+        room.alarm_pressure_in = false;
     } finally {
         isRefreshingRoom = false;
     }
@@ -842,8 +874,7 @@ export function startLiveLoop() {
 
     setInterval(async () => {
         if (useDummy) {
-            ["cr1", "cr2", "cr3"].forEach(tickRoom);
-            tickUtil();
+            /* Dummy statis dari getDashboardData — tanpa random walk per frame. */
         } else {
             await refreshDashboardFromApi();
             if (ui.panelMode === "room") await refreshCurrentRoomFromApi();
