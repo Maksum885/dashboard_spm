@@ -1,68 +1,235 @@
+import os
 import cv2
-from flask import Flask, Response
+import time
+import threading
+
+from flask import Flask, Response, jsonify
+from flask_cors import CORS
+from yolo_detector import detect_person
+
+# =====================================
+# FORCE RTSP TCP
+# =====================================
+os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = "rtsp_transport;tcp"
 
 app = Flask(__name__)
 
-# ==============================
-# 🔐 ISI SENDIRI BAGIAN INI
-# ==============================
-username = "admin"
-password = "Multimitraguna99"   # 🔥 isi sendiri
-ip_camera = "192.168.1.64"
+CORS(app)
 
-# 🔥 RTSP URL (substream lebih ringan)
-rtsp_url = f"rtsp://{username}:{password}@{ip_camera}:554/Streaming/Channels/102"
+# =====================================
+# CAMERA CONFIG
+# =====================================
+USERNAME = "admin"
+PASSWORD = "Multimitraguna99"
+IP_CAMERA = "192.168.1.64"
 
-# ==============================
-# 🎥 CONNECT CAMERA
-# ==============================
-camera = cv2.VideoCapture(rtsp_url, cv2.CAP_FFMPEG)
+RTSP_URL = (
+    f"rtsp://{USERNAME}:{PASSWORD}"
+    f"@{IP_CAMERA}:554/Streaming/Channels/102"
+)
 
-if not camera.isOpened():
-    print("❌ Kamera tidak terbuka (cek username/password/RTSP)")
-else:
-    print("✅ Kamera berhasil connect")
+# =====================================
+# GLOBALS
+# =====================================
+latest_frame = None
+camera = None
 
-# ==============================
-# 🎥 STREAM GENERATOR
-# ==============================
-def generate_frames():
+frame_lock = threading.Lock()
+
+person_detected = False
+frame_counter = 0
+
+# =====================================
+# CONNECT CAMERA
+# =====================================
+def create_camera():
+
+    print("🔄 Connecting camera...")
+
+    cap = cv2.VideoCapture(
+        RTSP_URL,
+        cv2.CAP_FFMPEG
+    )
+
+    cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+
+    time.sleep(1)
+
+    if cap.isOpened():
+        print("✅ Kamera berhasil connect")
+    else:
+        print("❌ Kamera gagal connect")
+
+    return cap
+
+
+# =====================================
+# CAMERA THREAD
+# =====================================
+def camera_worker():
+
     global camera
+    global latest_frame
+    global person_detected
+    global frame_counter
+
+    camera = create_camera()
 
     while True:
-        success, frame = camera.read()
 
-        # 🔥 HANDLE ERROR (INI KUNCI FIX)
-        if not success or frame is None:
-            print("❌ Frame error, reconnect...")
-            camera.release()
-            camera = cv2.VideoCapture(rtsp_url, cv2.CAP_FFMPEG)
-            continue
+        try:
 
-        # resize biar ringan
-        frame = cv2.resize(frame, (640, 360))
+            if camera is None or not camera.isOpened():
 
-        _, buffer = cv2.imencode('.jpg', frame)
-        frame_bytes = buffer.tobytes()
+                try:
+                    camera.release()
+                except:
+                    pass
 
-        yield (b'--frame\r\n'
-               b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
+                camera = None
 
-# ==============================
-# 🌐 ROUTE
-# ==============================
-@app.route('/')
+                time.sleep(2)
+
+                camera = create_camera()
+                continue
+
+            success, frame = camera.read()
+
+            if not success or frame is None:
+
+                print("⚠️ Frame gagal, reconnect...")
+
+                try:
+                    camera.release()
+                except:
+                    pass
+
+                camera = None
+
+                time.sleep(2)
+
+                camera = create_camera()
+                continue
+
+            # =========================
+            # YOLO DETECTION
+            # =========================
+            frame_counter += 1
+
+            if frame_counter % 5 == 0:
+
+                frame, detected = detect_person(frame)
+
+                person_detected = detected
+
+            # =========================
+            # SAVE FRAME
+            # =========================
+            with frame_lock:
+                latest_frame = frame.copy()
+
+        except Exception as e:
+
+            print("❌ Camera Error:", e)
+
+            try:
+                camera.release()
+            except:
+                pass
+
+            camera = None
+
+            time.sleep(2)
+
+            camera = create_camera()
+
+
+# =====================================
+# MJPEG STREAM
+# =====================================
+def generate_frames():
+
+    global latest_frame
+
+    while True:
+
+        try:
+
+            if latest_frame is None:
+                time.sleep(0.05)
+                continue
+
+            with frame_lock:
+                frame = latest_frame.copy()
+
+            success, buffer = cv2.imencode(
+                ".jpg",
+                frame,
+                [cv2.IMWRITE_JPEG_QUALITY, 70]
+            )
+
+            if not success:
+                continue
+
+            yield (
+                b"--frame\r\n"
+                b"Content-Type: image/jpeg\r\n\r\n"
+                + buffer.tobytes()
+                + b"\r\n"
+            )
+
+            time.sleep(0.03)
+
+        except GeneratorExit:
+            break
+
+        except Exception as e:
+
+            print("❌ Stream Error:", e)
+            time.sleep(1)
+
+
+# =====================================
+# ROUTES
+# =====================================
+@app.route("/")
 def home():
-    return "Flask CCTV aktif"
 
-@app.route('/camera1')
+    return "Flask CCTV + YOLO Active"
+
+
+@app.route("/camera1")
 def camera1():
-    return Response(generate_frames(),
-        mimetype='multipart/x-mixed-replace; boundary=frame')
 
-# ==============================
-# 🚀 RUN SERVER
-# ==============================
+    return Response(
+        generate_frames(),
+        mimetype="multipart/x-mixed-replace; boundary=frame"
+    )
+
+
+@app.route("/alarm_status")
+def alarm_status():
+
+    return jsonify({
+        "person_detected": person_detected
+    })
+
+
+# =====================================
+# START
+# =====================================
 if __name__ == "__main__":
-    print("🚀 Starting Flask...")
-    app.run(host="0.0.0.0", port=5000, debug=True)
+
+    threading.Thread(
+        target=camera_worker,
+        daemon=True
+    ).start()
+
+    print("🚀 Starting Flask YOLO...")
+
+    app.run(
+        host="192.168.1.100",
+        port=5000,
+        threaded=True,
+        debug=False
+    )

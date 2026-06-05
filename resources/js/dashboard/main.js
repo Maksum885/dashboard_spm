@@ -222,16 +222,56 @@ function renderPaneOverview(r, crId) {
 
     document.getElementById("pane-o").innerHTML = `
   ${plcLink}
-  <div class="cam-toolbar-v2">
-    <div class="section-label cam-toolbar-v2__title">Kamera</div>
-    <button type="button" class="btn-cam-wide${ui.cameraWide ? " is-active" : ""}" id="btn-cam-wide" onclick="toggleCameraWide()" aria-pressed="${wideOn}" title="Use map area for larger video (e.g. computer vision)">
-      <i class="${wideIco}" aria-hidden="true"></i> Wide view
-    </button>
+<div class="cam-toolbar-v2">
+  <div class="section-label cam-toolbar-v2__title">Kamera</div>
+
+  <button
+    type="button"
+    class="btn-cam-wide${ui.cameraWide ? " is-active" : ""}"
+    id="btn-cam-wide"
+    onclick="toggleCameraWide()"
+    aria-pressed="${wideOn}"
+    title="Use map area for larger video (e.g. computer vision)">
+
+    <i class="${wideIco}" aria-hidden="true"></i>
+    Wide view
+  </button>
+</div>
+
+<div class="cam-grid-v2">
+
+  <!-- Kamera 1 -->
+  <div class="cam-v2">
+    <img
+      src="http://192.168.1.100:5000/camera1"
+      class="cam-stream"
+      alt="Kamera 1">
+
+    <span class="cam-v2-lbl">Kamera 1</span>
+
+    <span class="cam-live">
+      <span class="cam-live-dot"></span>
+      LIVE
+    </span>
   </div>
-  <div class="cam-grid-v2">
-    <div class="cam-v2"><i class="ti ti-video-off" aria-hidden="true"></i><span class="cam-v2-lbl">Kamera 1</span><span class="cam-live"><span class="cam-live-dot"></span>LIVE</span></div>
-    <div class="cam-v2"><i class="ti ti-video-off" aria-hidden="true"></i><span class="cam-v2-lbl">Kamera 2</span><span class="cam-live"><span class="cam-live-dot"></span>LIVE</span></div>
+
+  <!-- Kamera 2 (sementara menggunakan stream yang sama) -->
+  <div class="cam-v2">
+    <img
+      src="http://192.168.1.100:5000/camera1"
+      class="cam-stream"
+      alt="Kamera 2">
+
+    <span class="cam-v2-lbl">Kamera 2</span>
+
+    <span class="cam-live">
+      <span class="cam-live-dot"></span>
+      LIVE
+    </span>
   </div>
+
+</div>
+</div>
   <div class="rp-overview-block">
     <div class="section-label">Pressure</div>
     <div class="sensor-card-v2" style="margin-bottom:8px">
@@ -940,3 +980,64 @@ export function registerGlobals() {
     window.toggleRooms = toggleRooms;
     window.toggleCameraWide = toggleCameraWide;
 }
+
+/* =====================================
+YOLO HUMAN DETECTION ALARM
+===================================== */
+
+async function checkHumanDetection() {
+
+    try {
+
+        const response = await fetch(
+            "http://192.168.1.100:5000/alarm_status"
+        );
+
+        const data = await response.json();
+
+        const alarmCount =
+            document.getElementById("al-count");
+
+        const alarmList =
+            document.getElementById("al-list");
+
+        if (!alarmCount || !alarmList) return;
+
+        if (data.person_detected) {
+
+            alarmCount.textContent = "1";
+
+            alarmList.innerHTML = `
+                <div class="human-alarm">
+                    🔴 Human detected on Camera 1
+                </div>
+            `;
+
+        } else {
+
+            alarmCount.textContent = "0";
+
+            alarmList.innerHTML = `
+                <div class="al-empty-msg">
+                    No active alarms
+                </div>
+            `;
+        }
+
+    } catch (error) {
+
+        console.error(
+            "Alarm API Error:",
+            error
+        );
+    }
+}
+
+/* Start Monitoring */
+checkHumanDetection();
+
+/* Check every 1 second */
+setInterval(
+    checkHumanDetection,
+    1000
+);
