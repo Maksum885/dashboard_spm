@@ -70,17 +70,29 @@
         @endif
 
         <div class="dash-alarm-block">
-          <div class="alarm-header dash-alarm-header">
-            <div class="alarm-title"><i class="ti ti-bell-ringing" aria-hidden="true"></i> Active alarms</div>
-            <div class="alarm-count" id="al-count">0</div>
-          </div>
-          <div class="alarm-list dash-alarm-list" id="dash-alarm-scroll">
-            <div id="al-list" class="dash-alarm-list-inner">
-              <div class="al-empty-msg">No active alarms</div>
-            </div>
-          </div>
-        </div>
+  <div class="alarm-header dash-alarm-header">
+    <div class="alarm-title">
+      <i class="ti ti-bell-ringing"></i>
+      Active alarms
+    </div>
+
+    <div class="alarm-count" id="al-count">
+      0
+    </div>
+  </div>
+
+  <div class="alarm-list dash-alarm-list" id="dash-alarm-scroll">
+
+    <div id="al-list" class="dash-alarm-list-inner">
+
+      <div class="al-empty-msg">
+        No active alarms
       </div>
+
+    </div>
+
+  </div>
+</div>
     </aside>
 
     <div class="dash-center">
@@ -94,8 +106,11 @@
 
     <aside class="rpanel dash-rpanel" id="rpanel">
       <div class="camera-view" id="camera-view">
-        <video id="camera" autoplay playsinline></video>
-      </div>
+    <img
+        id="camera"
+        src="http://172.20.10.2:5000/camera1"
+        alt="Camera Stream">
+</div>
       <div class="rp-accent" id="rp-accent"></div>
       <div class="rp-hdr rp-hdr--detail">
         <div class="rp-hdr-row rp-hdr-row--detail">
