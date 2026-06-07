@@ -22,11 +22,11 @@ class AccountPasswordController extends Controller
             'current_password' => ['required', 'current_password'],
             'password' => ['required', 'string', 'min:8', 'confirmed'],
         ], [
-            'current_password.required' => 'Masukkan kata sandi saat ini.',
-            'current_password.current_password' => 'Kata sandi saat ini tidak sesuai.',
-            'password.required' => 'Masukkan kata sandi baru.',
-            'password.min' => 'Kata sandi baru minimal 8 karakter.',
-            'password.confirmed' => 'Konfirmasi kata sandi baru tidak cocok.',
+            'current_password.required' => 'Enter your current password.',
+            'current_password.current_password' => 'Current password is incorrect.',
+            'password.required' => 'Enter a new password.',
+            'password.min' => 'New password must be at least 8 characters.',
+            'password.confirmed' => 'New password confirmation does not match.',
         ]);
 
         $request->user()->update([
@@ -35,6 +35,6 @@ class AccountPasswordController extends Controller
 
         return redirect()
             ->route('account.password.edit')
-            ->with('status', 'Kata sandi berhasil diubah.');
+            ->with('status', 'Password updated successfully.');
     }
 }

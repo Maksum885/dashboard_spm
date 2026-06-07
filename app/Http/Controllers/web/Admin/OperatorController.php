@@ -42,7 +42,7 @@ class OperatorController extends Controller
 
         return redirect()
             ->route('admin.operators.index')
-            ->with('status', 'Pengguna berhasil ditambahkan.');
+            ->with('status', 'User added successfully.');
     }
 
     public function edit(User $user): View
@@ -61,7 +61,7 @@ class OperatorController extends Controller
 
         return redirect()
             ->route('admin.operators.index')
-            ->with('status', 'Data pengguna diperbarui.');
+            ->with('status', 'User updated.');
     }
 
     public function resetPassword(Request $request, User $user): RedirectResponse
@@ -74,26 +74,26 @@ class OperatorController extends Controller
 
         return redirect()
             ->route('admin.operators.edit', $user)
-            ->with('status', 'Kata sandi berhasil diatur ulang.');
+            ->with('status', 'Password reset successfully.');
     }
 
     public function toggle(Request $request, User $user): RedirectResponse
     {
         if ($user->id === $request->user()->id) {
-            return back()->withErrors(['error' => 'Tidak dapat menonaktifkan akun yang sedang dipakai.']);
+            return back()->withErrors(['error' => 'You cannot deactivate your own account.']);
         }
 
         $user->update(['is_active' => ! $user->is_active]);
 
-        $state = $user->is_active ? 'diaktifkan' : 'dinonaktifkan';
+        $state = $user->is_active ? 'activated' : 'deactivated';
 
-        return back()->with('status', "Akun {$state}.");
+        return back()->with('status', "Account {$state}.");
     }
 
     public function destroy(Request $request, User $user): RedirectResponse
     {
         if ($user->id === $request->user()->id) {
-            return back()->withErrors(['error' => 'Tidak dapat menghapus akun sendiri.']);
+            return back()->withErrors(['error' => 'You cannot delete your own account.']);
         }
 
         $user->tokens()->delete();
@@ -101,7 +101,7 @@ class OperatorController extends Controller
 
         return redirect()
             ->route('admin.operators.index')
-            ->with('status', 'Pengguna dihapus.');
+            ->with('status', 'User deleted.');
     }
 
     /**
@@ -139,7 +139,7 @@ class OperatorController extends Controller
 
         if (in_array($role, ['operator', 'viewer'], true) && ! $crId && ! $trId) {
             throw ValidationException::withMessages([
-                'testing_room_id' => 'Pilih ruang uji atau control room untuk peran ini.',
+                'testing_room_id' => 'Select a testing room or control room for this role.',
             ]);
         }
 

@@ -1,0 +1,119 @@
+import { store, ui } from "./state.js";
+
+function dummyDashboardEnabled() {
+    return import.meta.env.VITE_DASHBOARD_USE_DUMMY === "true";
+}
+
+function isAdminUser() {
+    const u = typeof window.__SCADA_USER__ !== "undefined" ? window.__SCADA_USER__ : null;
+    return u && u.role === "admin";
+}
+
+/** Preset atap — selaras dengan roofSlideTarget01 & panel kanan. */
+const ROOF_PRESETS = {
+    close: {
+        roof_state: "CLOSE",
+        reg_roof_open: false,
+        reg_roof_closed: true,
+        roof_moving_open: false,
+        roof_moving_close: false,
+    },
+    open: {
+        roof_state: "OPEN",
+        reg_roof_open: true,
+        reg_roof_closed: false,
+        roof_moving_open: false,
+        roof_moving_close: false,
+    },
+};
+
+function collectRooms() {
+    const list = [];
+    for (const d of Object.values(store.data)) {
+        for (const r of d.rooms || []) {
+            list.push({ id: r.id, nm: r.nm || r.id });
+        }
+    }
+    list.sort((a, b) => a.nm.localeCompare(b.nm, undefined, { numeric: true }));
+    return list;
+}
+
+function applyPresetToRoom(room, presetKey) {
+    const preset = ROOF_PRESETS[presetKey];
+    if (!room || !preset) return;
+    Object.assign(room, preset);
+}
+
+/**
+ * Panel demo atap (hanya admin + VITE_DASHBOARD_USE_DUMMY=true).
+ * @param {{ findRoom: Function, findCR: Function, renderRoomPanelPanes: Function }} main
+ */
+export function initDemoRoofControls(main) {
+    if (!dummyDashboardEnabled() || !isAdminUser()) return;
+
+    const mapEl = document.getElementById("dash-map");
+    if (!mapEl) return;
+
+    const panel = document.createElement("div");
+    panel.id = "dash-demo-roof";
+    panel.className = "dash-demo-roof";
+    panel.setAttribute("role", "region");
+    panel.setAttribute("aria-label", "Demo roof control");
+    panel.innerHTML = `
+      <div class="dash-demo-roof__head">
+        <i class="ti ti-tool" aria-hidden="true"></i>
+        <span class="dash-demo-roof__title">Demo roof</span>
+        <span class="dash-demo-roof__badge">Dummy data</span>
+      </div>
+      <label class="dash-demo-roof__label" for="dash-demo-roof-room">Room</label>
+      <select id="dash-demo-roof-room" class="dash-demo-roof__select"></select>
+      <div class="dash-demo-roof__actions">
+        <button type="button" class="dash-demo-roof__btn" data-preset="close">Close</button>
+        <button type="button" class="dash-demo-roof__btn" data-preset="open">Open</button>
+      </div>
+    `;
+    mapEl.appendChild(panel);
+
+    const selectEl = panel.querySelector("#dash-demo-roof-room");
+
+    function fillRoomOptions() {
+        const rooms = collectRooms();
+        const prev = selectEl.value;
+        selectEl.innerHTML = rooms
+            .map((r) => `<option value="${r.id}">${r.nm}</option>`)
+            .join("");
+        if (prev && rooms.some((r) => r.id === prev)) selectEl.value = prev;
+        else if (ui.curRoomId && rooms.some((r) => r.id === ui.curRoomId)) selectEl.value = ui.curRoomId;
+        else if (rooms.length) selectEl.value = rooms[0].id;
+    }
+
+    function refreshRoomPanelIfOpen(roomId) {
+        if (ui.panelMode !== "room" || ui.curRoomId !== roomId) return;
+        const room = main.findRoom(roomId);
+        const crId = main.findCR(roomId);
+        if (room && crId) main.renderRoomPanelPanes(room, crId);
+    }
+
+    function onPreset(presetKey) {
+        const roomId = selectEl.value;
+        const room = main.findRoom(roomId);
+        if (!room) return;
+        applyPresetToRoom(room, presetKey);
+        refreshRoomPanelIfOpen(roomId);
+    }
+
+    panel.querySelectorAll("[data-preset]").forEach((btn) => {
+        btn.addEventListener("click", () => onPreset(btn.getAttribute("data-preset")));
+    });
+
+    selectEl.addEventListener("change", () => {
+        if (ui.curRoomId === selectEl.value) refreshRoomPanelIfOpen(selectEl.value);
+    });
+
+    fillRoomOptions();
+
+    window.__syncDemoRoofSelect = (roomId) => {
+        if (!roomId || !selectEl) return;
+        if ([...selectEl.options].some((o) => o.value === roomId)) selectEl.value = roomId;
+    };
+}

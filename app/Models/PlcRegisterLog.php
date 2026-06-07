@@ -42,4 +42,44 @@ class PlcRegisterLog extends Model
     {
         return $this->belongsTo(ControlRoom::class);
     }
+
+    /** English label for admin log UI; does not change stored data or PLC keys. */
+    public function displayDescription(): string
+    {
+        $name = $this->register_name;
+        if ($name !== null && $name !== '') {
+            $byKey = config('plc_registers.labels', []);
+            if (isset($byKey[$name])) {
+                return $byKey[$name];
+            }
+        }
+
+        $stored = $this->register_description;
+        if ($stored !== null && $stored !== '') {
+            $legacy = config('plc_registers.legacy_descriptions', []);
+            if (isset($legacy[$stored])) {
+                return $legacy[$stored];
+            }
+
+            return $stored;
+        }
+
+        return '';
+    }
+
+    /** Friendly register label for admin log (hides internal keys like roof_bergerak_buka). */
+    public function displayRegisterLabel(): string
+    {
+        $label = $this->displayDescription();
+        if ($label !== '') {
+            return $label;
+        }
+
+        $address = $this->register_address;
+        if ($address !== null && $address !== '') {
+            return (string) $address;
+        }
+
+        return '—';
+    }
 }

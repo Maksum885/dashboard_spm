@@ -6,6 +6,9 @@ let isRefreshingRoom = false;
 let isRefreshingDashboard = false;
 let plcEchoChannelName = null;
 
+/** ACK alarm demo (VITE_DASHBOARD_USE_DUMMY) — hanya di memori; hilang setelah refresh halaman. */
+const dummyAlarmAcks = new Map();
+
 function realtimeEnabled() {
     return Boolean(import.meta.env.VITE_PUSHER_APP_KEY && typeof window.Echo !== "undefined");
 }
@@ -37,6 +40,20 @@ function findRoomByApiId(apiRoomId) {
     return null;
 }
 
+function canShowPlcSettingsLink(user) {
+    return Boolean(user && user.role === "admin");
+}
+
+function renderPlcStatusBadge(status) {
+    const st = status || "offline";
+    const isOnline = st === "online";
+    const isError = st === "error";
+    const label = isOnline ? "PLC connected" : isError ? "PLC error" : "PLC offline";
+    const mod = isOnline ? "rp-plc-badge--on" : isError ? "rp-plc-badge--err" : "rp-plc-badge--off";
+    const icon = isOnline ? "ti-plug-connected" : isError ? "ti-alert-triangle" : "ti-plug-off";
+    return `<span class="rp-plc-badge ${mod}" role="status"><i class="ti ${icon}" aria-hidden="true"></i><span>${label}</span></span>`;
+}
+
 function updateRoomPlcStrip(room) {
     const el = document.getElementById("rp-plc-strip");
     if (!el) return;
@@ -44,9 +61,11 @@ function updateRoomPlcStrip(room) {
     if (u && u.role !== "viewer" && room?.api_room_id) {
         el.classList.remove("is-hidden");
         const st = room.plc_link_status || "offline";
-        const stLabel =
-            st === "online" ? "PLC online" : st === "error" ? "PLC error" : "PLC offline";
-        el.innerHTML = `<a class="rp-plc-strip__link" href="/settings/plc?testing_room_id=${room.api_room_id}"><i class="ti ti-settings"></i> Settings</a><span class="rp-plc-strip__id"> · ${stLabel}</span>`;
+        const badge = renderPlcStatusBadge(st);
+        const settingsLink = canShowPlcSettingsLink(u)
+            ? `<a class="rp-plc-strip__link" href="/settings/plc?testing_room_id=${room.api_room_id}"><i class="ti ti-settings"></i> Settings</a><span class="rp-plc-strip__sep" aria-hidden="true">·</span>`
+            : "";
+        el.innerHTML = `${settingsLink}${badge}`;
     } else {
         el.classList.add("is-hidden");
         el.innerHTML = "";
@@ -102,10 +121,32 @@ export function isRoomActivelyTesting(r) {
     return ["RUNNING", "HOLDING", "PRESSURIZING"].includes(r.phase);
 }
 
+function useDummyDashboard() {
+    return import.meta.env.VITE_DASHBOARD_USE_DUMMY === "true";
+}
+
+/** Realtime: alarm register hanya dipercaya saat PLC online (sama seperti EMERGENCY). */
+function plcRegistersTrusted(r) {
+    return useDummyDashboard() || (r?.plc_link_status || "") === "online";
+}
+
+/**
+ * #40001 tekanan masuk sebelum testing: alarm bila ada tekanan (nilai > 0, berapapun besarnya)
+ * saat testing belum dimulai. Dummy/API boleh set `alarm_pressure_in` langsung.
+ */
+export function hasInletPressureAlarm(r) {
+    if (!r) return false;
+    if (useDummyDashboard() && dummyAlarmAcks.get(r.id)?.has("pressure_in")) return false;
+    if (r.alarm_pressure_in === true) return plcRegistersTrusted(r);
+    const pres = Number(r.pres_in ?? 0);
+    return plcRegistersTrusted(r) && pres > 0 && !isRoomActivelyTesting(r);
+}
+
 function sidebarRoomDotClass(r) {
     if ((r.mode || "") === "MAINTENANCE") return "room-dot-st--mt";
     if (
         r.alarm_emergency ||
+        hasInletPressureAlarm(r) ||
         r.alarm_motor ||
         r.alarm_left_motor ||
         r.alarm_right_motor
@@ -115,12 +156,19 @@ function sidebarRoomDotClass(r) {
     return "room-dot-st--off";
 }
 
+/**
+ * Sidebar: dua badge — kiri Running/Idle (#40009), kanan Auto/Maint (#40003).
+ * Lebih jelas daripada satu badge berprioritas (MAINT menutupi TEST, dll.).
+ */
 function sidebarModeBadges(r) {
-    if (r.mode === "MAINTENANCE")
-        return `<span class="badge-sm badge-maint">MAINT</span>`;
-    if (isRoomActivelyTesting(r))
-        return `<span class="badge-sm badge-test">TEST</span>`;
-    return `<span class="badge-sm badge-auto">AUTO</span>`;
+    const testBadge = isRoomActivelyTesting(r)
+        ? `<span class="badge-sm badge-run" title="Test status: running">Run</span>`
+        : `<span class="badge-sm badge-idle" title="Test status: idle">Idle</span>`;
+    const modeBadge =
+        r.mode === "MAINTENANCE"
+            ? `<span class="badge-sm badge-maint" title="Panel mode: maintenance">Maint</span>`
+            : `<span class="badge-sm badge-auto" title="Panel mode: auto">Auto</span>`;
+    return `<span class="room-badges">${testBadge}${modeBadge}</span>`;
 }
 
 function fmtRegBar(n) {
@@ -128,44 +176,43 @@ function fmtRegBar(n) {
     return Number(n).toFixed(1);
 }
 
-function presInBar(r) {
-    const v = Number(r.pres_in ?? 0);
-    return Math.min(100, Math.max(0, (v / 10) * 100));
+/** #40011 / #40012 — tampilan satuan PSI (nilai dari register, tanpa badge Normal/High). */
+function fmtPressurePsi(value) {
+    if (value == null || Number.isNaN(Number(value))) return "—";
+    return Number(value).toFixed(1);
 }
 
-function roofMotionLabel(r) {
-    if (r.roof_moving_open) return { t: "Opening", cl: "st-badge-v2", st: "wa" };
-    if (r.roof_moving_close)
-        return { t: "Closing", cl: "st-badge-v2", st: "wa" };
-    const rs = r.roof_state || "CLOSE";
-    if (rs === "OPEN") return { t: "Open", cl: "st-badge-v2", st: "ok" };
-    if (rs === "STANDBY") return { t: "Standby", cl: "st-badge-v2", st: "in" };
-    return { t: "Closed", cl: "st-badge-v2", st: "nx" };
+/** Label panel Operational status — selaras phase RUNNING, bukan "standby". */
+function operationalTestStatusLabel(r) {
+    return isRoomActivelyTesting(r) ? "Running" : "Idle";
 }
 
-function roofAnimWidthPct(r) {
-    if (r.roof_moving_open || r.roof_moving_close) return 42;
-    if ((r.roof_state || "") === "OPEN") return 100;
-    if ((r.roof_state || "") === "STANDBY") return 50;
-    return 100;
+/** OPEN | CLOSE saja (legacy STANDBY dinormalisasi). */
+function normalizedRoofState(r) {
+    if (r.reg_roof_open) return "OPEN";
+    if (r.reg_roof_closed) return "CLOSE";
+    if (r.roof_moving_open) return "OPEN";
+    if (r.roof_moving_close) return "CLOSE";
+    const rs = String(r.roof_state || "CLOSE").toUpperCase();
+    return rs === "OPEN" ? "OPEN" : "CLOSE";
 }
 
-function roofAnimFillClass(r) {
-    if (r.roof_moving_open || r.roof_moving_close) return "";
-    if ((r.roof_state || "") === "OPEN") return "is-idle";
-    return "is-closed";
-}
-
-function roofPositionLabel(r) {
-    if (r.reg_roof_open) return "Open";
-    if (r.reg_roof_closed) return "Closed";
-    return "Standby";
-}
-
-function roofPositionBadgeStyle(r) {
-    if (r.reg_roof_open) return "background:#e0f2fe;color:#075985";
-    if (r.reg_roof_closed) return "background:#f3f4f6;color:#374151";
-    return "background:#e0f2fe;color:#075985";
+function renderRoofPositionHtml(r) {
+    const open = normalizedRoofState(r) === "OPEN";
+    return `
+  <div class="rp-overview-block rp-overview-block--roof">
+    <div class="section-label">Roof position</div>
+    <div class="roof-segment" role="status" aria-label="Roof ${open ? "open" : "closed"}">
+      <div class="roof-segment__cell${open ? " is-active is-open" : ""}">
+        <i class="ti ti-chevrons-up" aria-hidden="true"></i>
+        <span>OPEN</span>
+      </div>
+      <div class="roof-segment__cell${open ? "" : " is-active is-close"}">
+        <i class="ti ti-chevrons-down" aria-hidden="true"></i>
+        <span>CLOSE</span>
+      </div>
+    </div>
+  </div>`;
 }
 
 export function renderRoomPanelPanes(r, crId) {
@@ -200,25 +247,19 @@ export function toggleCameraWide() {
 function renderPaneOverview(r, crId) {
     const u = typeof window.__SCADA_USER__ !== "undefined" ? window.__SCADA_USER__ : null;
     const plcLink =
-        u && u.role !== "viewer" && r.api_room_id
-            ? `<a class="rp-plc-strip__link" style="margin-bottom:8px;display:inline-flex" href="/settings/plc?testing_room_id=${r.api_room_id}"><i class="ti ti-settings"></i> Settings</a>`
+        canShowPlcSettingsLink(u) && r.api_room_id
+            ? `<a class="rp-plc-strip__link rp-plc-strip__link--pane" href="/settings/plc?testing_room_id=${r.api_room_id}"><i class="ti ti-settings"></i> Settings</a>`
             : "";
     const wideOn = ui.cameraWide ? "true" : "false";
     const wideIco = ui.cameraWide ? "ti ti-arrows-minimize" : "ti ti-arrows-maximize";
     const p1 = Number(r.pres_bbm ?? r.test_pressure ?? 0);
     const p2 = Number(r.pres_2 ?? 0);
-    const hi = p2 > 7 || (p1 > 0 && p2 > p1 * 1.08);
-    const mv = roofMotionLabel(r);
-    const stStyle =
-        mv.st === "wa"
-            ? "background:#fef3c7;color:#92400e"
-            : mv.st === "ok"
-              ? "background:#dcfce7;color:#15803d"
-              : "background:#e0f2fe;color:#075985";
     const maint = r.mode === "MAINTENANCE";
-    const testing = isRoomActivelyTesting(r);
+    const testStatusLabel = operationalTestStatusLabel(r);
+    const testActive = isRoomActivelyTesting(r);
     const locked = r.door_lock === "locked";
-    const emerg = r.alarm_emergency;
+    /** #40002 alarm_alert — ON/OFF (register bool), bukan label ALARM/Normal. */
+    const emergOn = plcRegistersTrusted(r) && Boolean(r.alarm_emergency);
 
     document.getElementById("pane-o").innerHTML = `
   ${plcLink}
@@ -234,62 +275,36 @@ function renderPaneOverview(r, crId) {
   </div>
   <div class="rp-overview-block">
     <div class="section-label">Pressure</div>
-    <div class="sensor-card-v2" style="margin-bottom:8px">
-      <div class="sn">Inlet pressure</div>
-      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-        <div class="sv" style="font-size:18px">${fmtRegBar(r.pres_in)}<span class="su"> bar</span></div>
-        <div class="pres-in-bar" style="min-width:100px;flex:1"><i style="width:${presInBar(r)}%"></i></div>
-        <span style="font-size:10px;color:#6b7280">10 bar max</span>
-      </div>
-    </div>
     <div class="sensor-grid-v2">
       <div class="sensor-card-v2">
         <div class="sn">Pressure 1</div>
-        <div class="sv">${fmtRegBar(p1)}<span class="su"> bar</span></div>
-        <div class="sensor-badge-v2 sb-ok">Normal</div>
+        <div class="sv">${fmtPressurePsi(p1)}<span class="su"> PSI</span></div>
       </div>
       <div class="sensor-card-v2">
         <div class="sn">Pressure 2</div>
-        <div class="sv">${fmtRegBar(p2)}<span class="su"> bar</span></div>
-        <div class="sensor-badge-v2 ${hi ? "sb-warn" : "sb-ok"}">${hi ? "High" : "Normal"}</div>
+        <div class="sv">${fmtPressurePsi(p2)}<span class="su"> PSI</span></div>
       </div>
     </div>
   </div>
-  <div class="rp-overview-block">
-    <div class="section-label">Roof position</div>
-    <div class="roof-card-v2">
-      <div class="roof-row-v2">
-        <span style="font-size:11px;color:#6b7280">Current status</span>
-        <span class="st-badge-v2" style="${stStyle}">${mv.t}</span>
-      </div>
-      <div class="roof-row-v2">
-        <span style="font-size:11px;color:#6b7280">Motion</span>
-        <div class="roof-anim-bar"><div class="roof-anim-fill ${roofAnimFillClass(r)}" style="width:${roofAnimWidthPct(r)}%"></div></div>
-      </div>
-      <div class="roof-row-v2">
-        <span style="font-size:11px;color:#6b7280">Position</span>
-        <span class="st-badge-v2" style="${roofPositionBadgeStyle(r)}">${roofPositionLabel(r)}</span>
-      </div>
-    </div>
-  </div>
+  ${renderRoofPositionHtml(r)}
   <div class="rp-overview-block">
     <div class="section-label">Operational status</div>
     <div class="roof-card-v2">
       <div class="roof-row-v2">
-        <span style="font-size:11px;color:#6b7280">Panel mode</span>
+        <span class="rp-field-label">Panel mode</span>
         <span class="st-badge-v2" style="${maint ? "background:#ede9fe;color:#7c3aed" : "background:#dbeafe;color:#1e40af"}">${maint ? "Maintenance" : "Auto"}</span>
       </div>
       <div class="roof-row-v2">
-        <span style="font-size:11px;color:#6b7280">Test status</span>
-        <span class="st-badge-v2" style="${testing ? "background:#dcfce7;color:#15803d" : "background:#f3f4f6;color:#374151"}">${testing ? "Testing" : "Idle / standby"}</span>
+        <span class="rp-field-label">Test status</span>
+        <span class="st-badge-v2" style="${testActive ? "background:#dcfce7;color:#15803d" : "background:#f3f4f6;color:#374151"}">${testStatusLabel}</span>
       </div>
       <div class="roof-row-v2">
-        <span style="font-size:11px;color:#6b7280">Access door</span>
+        <span class="rp-field-label">Access door</span>
         <span class="st-badge-v2" style="${locked ? "background:#fee2e2;color:#b91c1c" : "background:#dcfce7;color:#15803d"}"><i class="ti ${locked ? "ti-lock" : "ti-lock-open"}"></i> ${locked ? "Locked" : "Unlocked"}</span>
       </div>
       <div class="roof-row-v2">
-        <span style="font-size:11px;color:#6b7280">Emergency</span>
-        <span class="st-badge-v2" style="${emerg ? "background:#fee2e2;color:#b91c1c" : "background:#f0fdf4;color:#15803d"}">${emerg ? "ALARM" : "Normal"}</span>
+        <span class="rp-field-label">Emergency</span>
+        <span class="st-badge-v2" style="${emergOn ? "background:#fee2e2;color:#b91c1c" : "background:#f3f4f6;color:#374151"}">${emergOn ? "ON" : "OFF"}</span>
       </div>
     </div>
   </div>
@@ -328,38 +343,85 @@ function renderPaneLog(r) {
     document.getElementById("pane-e").innerHTML = h;
 }
 
+const DUMMY_ALARM_LABELS = {
+    emergency: "EMERGENCY",
+    pressure_in: "ALARM PRESSURE",
+    left_motor: "LEFT MOTOR FAIL",
+    right_motor: "RIGHT MOTOR FAIL",
+    motor: "MOTOR FAIL",
+};
+
+/**
+ * Acknowledge alarm di mode dummy (in-memory). Setelah refresh browser, data dummy asli kembali.
+ */
+export function ackDummyRoomAlarm(roomId, alarmKey) {
+    if (!useDummyDashboard() || !roomId || !DUMMY_ALARM_LABELS[alarmKey]) return;
+
+    const room = findRoom(roomId);
+    if (!room) return;
+
+    if (!dummyAlarmAcks.has(roomId)) dummyAlarmAcks.set(roomId, new Set());
+    dummyAlarmAcks.get(roomId).add(alarmKey);
+
+    switch (alarmKey) {
+        case "emergency":
+            room.alarm_emergency = false;
+            break;
+        case "pressure_in":
+            room.alarm_pressure_in = false;
+            break;
+        case "left_motor":
+            room.alarm_left_motor = false;
+            break;
+        case "right_motor":
+            room.alarm_right_motor = false;
+            break;
+        case "motor":
+            room.alarm_motor = false;
+            break;
+    }
+
+    if (!Array.isArray(room.events)) room.events = [];
+    room.events.unshift({
+        t: getNow(),
+        c: "ok",
+        m: `${DUMMY_ALARM_LABELS[alarmKey]} acknowledged (demo)`,
+    });
+
+    updateAlarmSidebar();
+    buildSidebarRooms();
+    if (ui.panelMode === "room" && ui.curRoomId === roomId) {
+        const crId = findCR(roomId);
+        if (crId) renderRoomPanelPanes(room, crId);
+    }
+}
+
 function renderRoomAlarmSection(r) {
     const rows = [];
-    if (r.alarm_emergency)
-        rows.push({
-            t: "EMERGENCY",
-            sub: r.nm,
-        });
+    if (r.alarm_emergency && plcRegistersTrusted(r))
+        rows.push({ key: "emergency", t: "EMERGENCY", sub: r.nm });
+    if (hasInletPressureAlarm(r))
+        rows.push({ key: "pressure_in", t: "ALARM PRESSURE", sub: r.nm });
     if (r.dual_motor) {
         if (r.alarm_left_motor)
-            rows.push({
-                t: "LEFT MOTOR FAIL",
-                sub: r.nm,
-            });
+            rows.push({ key: "left_motor", t: "LEFT MOTOR FAIL", sub: r.nm });
         if (r.alarm_right_motor)
-            rows.push({
-                t: "RIGHT MOTOR FAIL",
-                sub: r.nm,
-            });
+            rows.push({ key: "right_motor", t: "RIGHT MOTOR FAIL", sub: r.nm });
     } else if (r.alarm_motor) {
-        rows.push({
-            t: "MOTOR FAIL",
-            sub: r.nm,
-        });
+        rows.push({ key: "motor", t: "MOTOR FAIL", sub: r.nm });
     }
     if (!rows.length)
         return `<div class="section-label" style="margin-top:10px">Room alarms</div><div style="font-size:11px;color:#6b7280">No active alarms in this room.</div>`;
+    const dummy = useDummyDashboard();
     let h = `<div class="section-label" style="margin-top:10px">Room alarms</div>`;
     rows.forEach((x) => {
+        const ackBtn = dummy
+            ? `<button type="button" class="btn-ack" onclick="ackDummyRoomAlarm('${r.id}','${x.key}')" title="Acknowledge (demo — reset setelah refresh halaman)">ACK</button>`
+            : `<button type="button" class="btn-ack" disabled title="Acknowledge alarm PLC / layanan alarm (bukan mode dummy)">ACK</button>`;
         h += `<div class="alarm-room-v2">
     <i class="ti ti-alert-triangle" style="font-size:15px;color:var(--cr)"></i>
-    <div style="flex:1"><div style="font-size:11px;font-weight:600;color:#b91c1c">${x.t}</div><div style="font-size:10px;color:#6b7280">${x.sub}</div></div>
-    <button type="button" class="btn-ack" title="Acknowledge (PLC / alarm service)">ACK</button>
+    <div style="flex:1"><div class="alarm-room-title">${x.t}</div><div class="alarm-room-sub">${x.sub}</div></div>
+    ${ackBtn}
   </div>`;
     });
     return h;
@@ -519,6 +581,10 @@ export function openRoomPanel(roomId, crId) {
     const ri = document.getElementById(`ri-${roomId}`);
     if (ri) ri.classList.add("active");
 
+    if (typeof window.__syncDemoRoofSelect === "function") {
+        window.__syncDemoRoofSelect(roomId);
+    }
+
     const cont = document.getElementById(`rooms-${crId}`);
     const btn = document.getElementById(`exp-${crId}`);
     if (cont && btn) {
@@ -674,9 +740,25 @@ function getSidebarEmergencyAlerts() {
     return out;
 }
 
-/** Satu daftar sidebar: emergency dulu, lalu motor. */
+/** #40001 — tekanan masuk sebelum testing dimulai. */
+function getSidebarPressureInAlerts() {
+    const out = [];
+    for (const [crId, d] of Object.entries(store.data)) {
+        for (const r of d.rooms) {
+            if (hasInletPressureAlarm(r))
+                pushAlarm(out, "wa", `${r.nm}`, "ALARM PRESSURE", crId, r.id);
+        }
+    }
+    return out;
+}
+
+/** Satu daftar sidebar: emergency, pressure in, lalu motor. */
 export function getSidebarCombinedAlerts() {
-    return [...getSidebarEmergencyAlerts(), ...getSidebarAlarms()];
+    return [
+        ...getSidebarEmergencyAlerts(),
+        ...getSidebarPressureInAlerts(),
+        ...getSidebarAlarms(),
+    ];
 }
 
 export function getNow() {
@@ -709,7 +791,7 @@ export function updateAlarmSidebar() {
                 (a) => `
       <div class="al-row" onclick="openRoomPanel('${a.roomId}','${a.crId}')">
         <div class="al-bar ${a.lv}"></div>
-        <div class="al-txt"><div class="al-name">${a.nm}</div><div class="al-sub">${a.sub}</div></div>
+        <div class="al-txt"><div class="al-name">${a.nm}</div><div class="al-sub al-sub--type">${a.sub}</div></div>
         <div class="al-time">${a.time}</div>
       </div>`,
             )
@@ -794,14 +876,13 @@ function applySnapshotToRoom(room, snapshot) {
     const doorLocked = Boolean(
         extractSnapshotValue(snapshot, ["40008", "pintu_terkunci", "door_locked"], false),
     );
-    const testingOn = Boolean(
-        extractSnapshotValue(snapshot, ["40009", "testing_dimulai", "testing_running"], false),
-    );
-
     if (!Number.isNaN(rawIn)) {
         const bar = rawIn > 50 ? rawIn / 100 : rawIn;
         room.pres_in = +bar.toFixed(2);
     }
+    const testingOn = Boolean(
+        extractSnapshotValue(snapshot, ["40009", "testing_dimulai", "testing_running"], false),
+    );
     if (!Number.isNaN(processPressure)) {
         if (room.tp === "TEST PIT") room.test_pressure = +processPressure.toFixed(2);
         else room.pres_bbm = +processPressure.toFixed(2);
@@ -813,17 +894,20 @@ function applySnapshotToRoom(room, snapshot) {
     room.roof_moving_open = roofMovingOpen;
     room.roof_moving_close = roofMovingClose;
 
-    if (roofMovingOpen || roofMovingClose) room.roof_state = "STANDBY";
-    else if (roofOpenBit) room.roof_state = "OPEN";
+    if (roofOpenBit) room.roof_state = "OPEN";
     else if (roofClosed) room.roof_state = "CLOSE";
-    else if (!roofOpenBit && !roofClosed) room.roof_state = room.roof_state || "CLOSE";
+    else if (roofMovingOpen) room.roof_state = "OPEN";
+    else if (roofMovingClose) room.roof_state = "CLOSE";
+    else room.roof_state = "CLOSE";
 
     /* Hanya percaya #40002 jika ruang bertanda PLC online (hindari cache lama saat putus). */
     room.alarm_emergency = plcLive && alarmAlert;
-    room.alarm_pressure_in = false;
     room.mode = maintenance ? "MAINTENANCE" : "AUTO";
     room.door_lock = doorLocked ? "locked" : "unlocked";
     room.phase = testingOn ? "RUNNING" : "STANDBY";
+    /* #40001: tekanan masuk sebelum testing — alarm jika ada tekanan (> 0) saat #40009 belum ON. */
+    const presInBar = Number(room.pres_in ?? 0);
+    room.alarm_pressure_in = plcLive && presInBar > 0 && !testingOn;
 }
 
 async function refreshCurrentRoomFromApi() {
@@ -939,4 +1023,5 @@ export function registerGlobals() {
     window.swTab = swTab;
     window.toggleRooms = toggleRooms;
     window.toggleCameraWide = toggleCameraWide;
+    window.ackDummyRoomAlarm = ackDummyRoomAlarm;
 }

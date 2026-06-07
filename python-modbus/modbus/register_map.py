@@ -32,7 +32,7 @@ import os
 REGISTER_MAP: dict[int, dict] = {
     40001: {
         "key":         "tekanan_masuk",
-        "desc":        "Tekanan Masuk Sebelum Testing Dimulai",
+        "desc":        "Inlet pressure before testing starts",
         "type":        "uint16",
         "change_type": "value_change",
     },
@@ -44,13 +44,13 @@ REGISTER_MAP: dict[int, dict] = {
     },
     40003: {
         "key":         "mode_maintenance",
-        "desc":        "Panel Sedang Di Mode Maintenance",
+        "desc":        "Panel in maintenance mode",
         "type":        "bool",
         "change_type": "maintenance_on",
     },
     40004: {
         "key":         "roof_tertutup",
-        "desc":        "Roof Tertutup",
+        "desc":        "Roof closed",
         "type":        "bool",
         "change_type": "status_change",
     },
@@ -62,39 +62,39 @@ REGISTER_MAP: dict[int, dict] = {
     },
     40006: {
         "key":         "roof_bergerak_buka",
-        "desc":        "Roof Bergerak Membuka",
+        "desc":        "Roof moving (opening)",
         "type":        "bool",
         "change_type": "roof_moving",
     },
     40007: {
         "key":         "roof_bergerak_tutup",
-        "desc":        "Roof Bergerak Menutup",
+        "desc":        "Roof moving (closing)",
         "type":        "bool",
         "change_type": "roof_moving",
     },
     40008: {
         "key":         "pintu_terkunci",
-        "desc":        "Pintu Akses Sedang Terkunci",
+        "desc":        "Access door locked",
         "type":        "bool",
         "change_type": "door_locked",
     },
     40009: {
         "key":         "testing_dimulai",
-        "desc":        "Testing Sedang Dimulai",
+        "desc":        "Testing in progress",
         "type":        "bool",
         "change_type": "testing_started",
     },
     # 40010 sengaja di-skip (tidak dipakai di PLC)
     40011: {
         "key":         "pressure_1",
-        "desc":        "Pressure 1",
+        "desc":        "Pressure 1 (PSI)",
         # float32 = 2 word; word[10]+word[11] → gunakan parse_float32()
         "type":        "float32",
         "change_type": "value_change",
     },
     40012: {
         "key":         "pressure_2",
-        "desc":        "Pressure 2",
+        "desc":        "Pressure 2 (PSI)",
         # float32 = 2 word; word[12]+word[13] → gunakan parse_float32()
         "type":        "float32",
         "change_type": "value_change",

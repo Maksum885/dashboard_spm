@@ -103,9 +103,10 @@ class PlcDataService
         $uiId = $this->testingRoomUiId($tr);
         $isPit = $tr->type === 'pit';
 
-        $pressureBar = $this->registerFloat($registers, ['40011', 'pressure_line', 'pres_bbm']);
-        if ($pressureBar > 0) {
-            $crLinePressure = max($crLinePressure, $pressureBar);
+        /* #40011 / #40012: float32 PSI (tampilan dashboard, tanpa konversi bar). */
+        $pressure1 = $this->registerFloat($registers, ['40011', 'pressure_1']);
+        if ($pressure1 > 0) {
+            $crLinePressure = max($crLinePressure, $pressure1);
         }
 
         $roof = $this->deriveRoofStateFromRegisters($registers);
@@ -158,8 +159,8 @@ class PlcDataService
             'reg_roof_open' => $roofOpenBit,
             'reg_roof_closed' => $roofClosedBit,
             'alarm_emergency' => $liveEmergency,
-            /* Tidak ada bit PLC terpisah untuk “pressure in alert”; hindari duplikat di sidebar dengan #40002. */
-            'alarm_pressure_in' => false,
+            /* #40001: tekanan masuk sebelum testing (#40009) — alarm bila ada tekanan (> 0) saat testing belum dimulai. */
+            'alarm_pressure_in' => $plcOnline && $presIn > 0 && ! $testingOn,
             'alarm_left_motor' => $alarms['left_motor'],
             'alarm_right_motor' => $alarms['right_motor'],
             'alarm_motor' => $alarms['motor'],
@@ -177,7 +178,7 @@ class PlcDataService
             ];
         } else {
             $base += [
-                'pres_bbm' => $pressureBar > 0 ? round($pressureBar, 2) : 0.0,
+                'pres_bbm' => $pressure1 > 0 ? round($pressure1, 2) : 0.0,
             ];
         }
 
@@ -209,20 +210,22 @@ class PlcDataService
     }
 
     /**
-     * Roof: prioritas bit bergerak (#40006/#40007), lalu tertutup/terbuka (#40004/#40005).
+     * Atap: hanya OPEN atau CLOSE (#40004 / #40005). Bit gerak (#40006/#40007) hanya indikasi arah.
      *
      * @param  array<string, mixed>  $registers
      */
     private function deriveRoofStateFromRegisters(array $registers): string
     {
-        if ($this->registerBool($registers, ['40006', 'roof_bergerak_buka'])
-            || $this->registerBool($registers, ['40007', 'roof_bergerak_tutup'])) {
-            return 'STANDBY';
-        }
         if ($this->registerBool($registers, ['40005', 'roof_terbuka'])) {
             return 'OPEN';
         }
         if ($this->registerBool($registers, ['40004', 'roof_tertutup'])) {
+            return 'CLOSE';
+        }
+        if ($this->registerBool($registers, ['40006', 'roof_bergerak_buka'])) {
+            return 'OPEN';
+        }
+        if ($this->registerBool($registers, ['40007', 'roof_bergerak_tutup'])) {
             return 'CLOSE';
         }
 

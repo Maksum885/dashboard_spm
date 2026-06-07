@@ -45,8 +45,14 @@ export function normalizeDashboardPayload(raw) {
  */
 export async function getDashboardData() {
     if (useDummyDashboard()) {
+        const controlRooms = clone(DUMMY_CONTROL_ROOMS);
+        Object.values(controlRooms).forEach((cr) => {
+            (cr.rooms || []).forEach((room) => {
+                if (!room.plc_link_status) room.plc_link_status = 'online';
+            });
+        });
         return {
-            controlRooms: clone(DUMMY_CONTROL_ROOMS),
+            controlRooms,
             utilities: clone(DUMMY_UTILITIES),
         };
     }

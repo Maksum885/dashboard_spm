@@ -1,6 +1,7 @@
 import { getDashboardData } from '../services/dashboardData.js';
 import { store } from './state.js';
 import { createDashboardThreeScene } from '../three/scene.js';
+import { initDemoRoofControls } from './demoRoofControls.js';
 import * as Main from './main.js';
 
 export async function initDashboard() {
@@ -14,6 +15,7 @@ export async function initDashboard() {
     Main.buildSidebarRooms();
     Main.updateAlarmSidebar();
     Main.updateUtilSidebar();
+    initDemoRoofControls(Main);
 
     const three = createDashboardThreeScene({
         canvas: document.getElementById('cv'),

@@ -927,6 +927,14 @@ body.scada-dashboard {
     color: var(--dim);
     margin-top: 2px;
 }
+/* Tipe alarm (EMERGENCY, MOTOR FAIL, …) */
+.al-sub.al-sub--type {
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.9px;
+    text-transform: uppercase;
+    color: #4b4b4b;
+}
 .al-time {
     font-family: var(--M);
     font-size: 12px;
@@ -1002,7 +1010,7 @@ body.scada-dashboard {
     z-index: 64;
 }
 
-/* ── TOOLTIP ── */
+/* ── TOOLTIP (hover gedung di peta 3D) ── */
 #tip {
     position: fixed;
     pointer-events: none;
@@ -1010,14 +1018,26 @@ body.scada-dashboard {
     background: rgba(255, 255, 255, 0.97);
     border: 1px solid var(--b2);
     border-top: 2px solid;
-    border-radius: 0 0 4px 4px;
-    padding: 5px 13px;
+    border-radius: 0 0 6px 6px;
+    padding: 8px 14px;
     font-family: var(--M);
-    font-size: 8px;
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.14);
     opacity: 0;
     transition: opacity 0.1s;
     white-space: nowrap;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    line-height: 1.25;
+}
+#tip .tip-title {
+    font-size: 13px;
+    font-weight: 600;
+}
+#tip .tip-hint {
+    font-size: 12px;
+    font-weight: 500;
+    color: #6b7280;
 }
 
 /* ── RIGHT PANEL ── */
@@ -1080,33 +1100,74 @@ body.scada-dashboard {
 }
 .rp-plc-strip {
     margin-top: 0;
-    flex: 1;
+    flex: 0 1 auto;
     min-width: 0;
     display: inline-flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 0;
+    justify-content: flex-end;
+    gap: 8px;
 }
 .rp-plc-strip.is-hidden {
     display: none;
 }
+.rp-plc-strip__sep {
+    color: #94a3b8;
+    font-size: 12px;
+    line-height: 1;
+    user-select: none;
+}
 .rp-plc-strip__link {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
+    gap: 5px;
     font-family: var(--M);
     font-size: 10px;
     font-weight: 700;
     color: var(--amber);
     text-decoration: none;
     letter-spacing: 0.04em;
+    white-space: nowrap;
+}
+.rp-plc-strip__link--pane {
+    margin-bottom: 10px;
 }
 .rp-plc-strip__link:hover {
     text-decoration: underline;
 }
-.rp-plc-strip__id {
-    font-weight: 500;
-    color: var(--muted);
+.rp-plc-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    font-family: var(--M);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    border: 1px solid;
+    white-space: nowrap;
+    line-height: 1.2;
+}
+.rp-plc-badge .ti {
+    font-size: 13px;
+    flex-shrink: 0;
+}
+.rp-plc-badge--on {
+    background: #ecfdf5;
+    border-color: #6ee7b7;
+    color: #047857;
+}
+.rp-plc-badge--off {
+    background: #fff7ed;
+    border-color: #fdba74;
+    color: #9a3412;
+}
+.rp-plc-badge--err {
+    background: #fef2f2;
+    border-color: #fca5a5;
+    color: #b91c1c;
 }
 .rp-close {
     background: var(--s2);
@@ -1768,23 +1829,44 @@ body.scada-dashboard {
     margin-top: 2px;
     padding-left: 0;
 }
+.scada-dashboard .room-badges {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
+}
 .scada-dashboard .badge-sm {
     font-size: 9px;
     padding: 1px 6px;
     border-radius: 3px;
     font-weight: 600;
+    white-space: nowrap;
 }
 .scada-dashboard .badge-auto {
     background: #dbeafe;
     color: #1e40af;
+    border: 0.5px solid #60a5fa;
 }
 .scada-dashboard .badge-maint {
     background: #ede9fe;
     color: #7c3aed;
+    border: 0.5px solid #a78bfa;
 }
+.scada-dashboard .badge-run {
+    background: #dcfce7;
+    color: #15803d;
+    border: 0.5px solid #4ade80;
+}
+.scada-dashboard .badge-idle {
+    background: #e2e8f0;
+    color: #1e293b;
+    border: 0.5px solid #94a3b8;
+}
+/* legacy alias */
 .scada-dashboard .badge-test {
     background: #dcfce7;
     color: #15803d;
+    border: 0.5px solid #4ade80;
 }
 .scada-dashboard .rp-hdr--detail {
     border-bottom: 0.5px solid var(--dash-border);
@@ -1824,8 +1906,8 @@ body.scada-dashboard {
     display: none;
 }
 .scada-dashboard .rp-tab {
-    padding: 8px 10px;
-    font-size: 11px;
+    padding: 9px 10px;
+    font-size: 13px;
     letter-spacing: 0.02em;
     white-space: nowrap;
 }
@@ -1855,10 +1937,15 @@ body.scada-dashboard {
 .scada-dashboard .section-label {
     font-size: 10px;
     font-weight: 600;
-    color: #6b7280;
+    color: #374151;
     letter-spacing: 0.5px;
     text-transform: uppercase;
     margin-bottom: 6px;
+}
+.scada-dashboard .rp-field-label {
+    font-size: 11px;
+    font-weight: 500;
+    color: #374151;
 }
 .scada-dashboard .reg-addr {
     color: #9ca3af;
@@ -1878,7 +1965,8 @@ body.scada-dashboard {
 }
 .scada-dashboard .sensor-card-v2 .sn {
     font-size: 10px;
-    color: #6b7280;
+    font-weight: 500;
+    color: #374151;
     margin-bottom: 4px;
 }
 .scada-dashboard .sensor-card-v2 .sv {
@@ -1932,6 +2020,58 @@ body.scada-dashboard {
     border: 0.5px solid var(--dash-border);
     border-radius: 7px;
     padding: 10px 12px;
+}
+/* Roof OPEN | CLOSE — dua sel, status aktif disorot (selaras grid tekanan). */
+.scada-dashboard .rp-overview-block--roof {
+    margin-top: 12px;
+}
+.scada-dashboard .roof-segment {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+}
+.scada-dashboard .roof-segment__cell {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    min-height: 52px;
+    padding: 8px 6px;
+    border-radius: 7px;
+    border: 0.5px solid #cbd5e1;
+    background: #f1f5f9;
+    color: #475569;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    transition:
+        background 0.2s ease,
+        border-color 0.2s ease,
+        color 0.2s ease;
+}
+.scada-dashboard .roof-segment__cell .ti {
+    font-size: 20px;
+    line-height: 1;
+    opacity: 0.45;
+}
+.scada-dashboard .roof-segment__cell.is-active .ti {
+    opacity: 1;
+}
+.scada-dashboard .roof-segment__cell.is-active.is-open {
+    background: #dcfce7;
+    border-color: #86efac;
+    color: #15803d;
+    box-shadow: 0 0 0 1px rgba(34, 197, 94, 0.12);
+}
+.scada-dashboard .roof-segment__cell.is-active.is-close {
+    background: #dbeafe;
+    border-color: #93c5fd;
+    color: #1d4ed8;
+    box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.14);
+}
+.scada-dashboard .roof-segment__cell.is-active.is-close .ti {
+    color: #2563eb;
 }
 .scada-dashboard .roof-row-v2 {
     display: flex;
@@ -2016,12 +2156,12 @@ body.scada-dashboard {
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    padding: 5px 10px;
+    padding: 6px 12px;
     border-radius: 5px;
     border: 0.5px solid var(--dash-border);
     background: #fff;
     font-family: var(--M);
-    font-size: 10px;
+    font-size: 12px;
     font-weight: 600;
     color: var(--txt);
     cursor: pointer;
@@ -2144,6 +2284,19 @@ body.scada-dashboard {
 .scada-dashboard .alarm-room-v2:last-child {
     margin-bottom: 0;
 }
+.scada-dashboard .alarm-room-title {
+    font-size: 10px;
+    font-weight: 600;
+    color: #b91c1c;
+    letter-spacing: 0.1em;
+    word-spacing: 0.04em;
+    text-transform: uppercase;
+}
+.scada-dashboard .alarm-room-sub {
+    font-size: 9px;
+    color: #14191f;
+    margin-top: 2px;
+}
 .scada-dashboard .btn-ack {
     font-size: 10px;
     padding: 2px 8px;
@@ -2156,6 +2309,15 @@ body.scada-dashboard {
 }
 .scada-dashboard .btn-ack:hover {
     background: #fef2f2;
+}
+.scada-dashboard .btn-ack:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+    border-color: #e5e7eb;
+    color: #9ca3af;
+}
+.scada-dashboard .btn-ack:disabled:hover {
+    background: #fff;
 }
 .scada-dashboard .cr-rooms {
     background: #fff;
@@ -2259,6 +2421,42 @@ body.settings-app {
     margin: 0 auto;
     padding: 20px clamp(16px, 3vw, 28px) 56px;
 }
+.settings-layout--account {
+    max-width: 720px;
+}
+.settings-layout--account .admin-page--narrow {
+    max-width: none;
+    margin: 0;
+}
+.account-password-card {
+    padding: 22px 24px 24px;
+}
+.account-password-card-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding-bottom: 18px;
+    margin-bottom: 20px;
+    border-bottom: 1px solid #e2e8f0;
+    font-size: 14px;
+    color: #334155;
+}
+.account-password-card-head .ti {
+    font-size: 22px;
+    color: #1564c0;
+    flex-shrink: 0;
+}
+.account-password-card-head strong {
+    color: #0f172a;
+    font-weight: 700;
+}
+.account-password-grid {
+    grid-template-columns: 1fr;
+    gap: 18px;
+}
+.account-password-grid .admin-form-actions {
+    margin-top: 4px;
+}
 .settings-group-title {
     font-family: var(--M);
     font-size: 13px;
@@ -2321,10 +2519,13 @@ body.settings-app {
     margin: 0 0 6px;
 }
 .settings-page-lead {
-    font-size: 13px;
-    color: #64748b;
+    font-size: 15px;
+    color: #475569;
     line-height: 1.5;
-    margin: 0 0 8px;
+    margin: 0;
+}
+.settings-layout .admin-page-head {
+    margin-bottom: 8px;
 }
 .settings-section-title {
     font-family: var(--M);
@@ -2332,36 +2533,11 @@ body.settings-app {
     font-weight: 700;
     letter-spacing: 0.06em;
     text-transform: uppercase;
-    color: #64748b;
-    margin: 28px 0 12px;
+    color: #334155;
+    margin: 20px 0 12px;
     display: flex;
     align-items: center;
     gap: 8px;
-}
-.settings-help {
-    background: #f0f9ff;
-    border: 1px solid #bae6fd;
-    border-radius: 8px;
-    padding: 14px 16px;
-    font-size: 13px;
-    line-height: 1.55;
-    color: #0c4a6e;
-    margin-bottom: 20px;
-}
-.settings-help strong {
-    display: block;
-    margin-bottom: 8px;
-    color: #075985;
-}
-.settings-help-list {
-    margin: 0;
-    padding-left: 1.15rem;
-}
-.settings-help-list li {
-    margin-bottom: 6px;
-}
-.settings-help-list li:last-child {
-    margin-bottom: 0;
 }
 .settings-flash {
     background: #ecfdf5;
@@ -2384,7 +2560,7 @@ body.settings-app {
 }
 .settings-card {
     background: #fff;
-    border: 1px solid var(--dash-border);
+    border: 1px solid #94a3b8;
     border-radius: 10px;
     padding: 16px 18px 18px;
     margin-bottom: 14px;
@@ -2410,15 +2586,11 @@ body.settings-app {
     margin: 0 0 4px;
     color: var(--txt);
 }
-.settings-card-meta,
 .settings-card-seen {
     font-size: 12px;
-    color: #64748b;
-    margin: 0;
+    color: #475569;
+    margin: 4px 0 0;
     line-height: 1.45;
-}
-.settings-card-seen {
-    margin-top: 6px;
 }
 .settings-card-status {
     flex-shrink: 0;
@@ -2461,32 +2633,15 @@ body.settings-app {
     display: block;
     font-size: 11px;
     font-weight: 600;
-    color: #64748b;
+    color: #1e293b;
     margin-bottom: 5px;
 }
 .settings-field label {
     display: block;
     font-size: 11px;
     font-weight: 600;
-    color: #64748b;
+    color: #1e293b;
     margin-bottom: 5px;
-}
-.settings-readonly-val {
-    padding: 10px 12px;
-    border: 1px dashed var(--dash-border);
-    border-radius: 8px;
-    background: #f8fafc;
-    font-size: 14px;
-    font-weight: 600;
-    color: var(--txt);
-    line-height: 1.35;
-}
-.settings-readonly-hint {
-    display: block;
-    font-size: 11px;
-    font-weight: 500;
-    color: #64748b;
-    margin-top: 4px;
 }
 .settings-optional {
     font-weight: 500;
@@ -2498,7 +2653,8 @@ body.settings-app {
 .settings-field input[type="email"] {
     width: 100%;
     padding: 10px 12px;
-    border: 1px solid var(--dash-border);
+    border: 1px solid #94a3b8;
+    color: #0f172a;
     border-radius: 8px;
     font-size: 14px;
     font-family: var(--F);
@@ -2545,17 +2701,21 @@ body.settings-app {
 .settings-save-btn {
     margin-top: 16px;
     padding: 10px 20px;
-    border: none;
+    border: 1px solid #124ea8;
     border-radius: 8px;
-    background: var(--amber);
-    color: #1a1a1a;
+    background: #1564c0;
+    color: #fff;
     font-family: var(--M);
     font-size: 13px;
     font-weight: 700;
     cursor: pointer;
+    transition:
+        background 0.15s,
+        border-color 0.15s;
 }
 .settings-save-btn:hover {
-    filter: brightness(1.06);
+    background: #124a8f;
+    border-color: #0f3d75;
 }
 .scada-dashboard .hdr-btn.dash-btn-settings {
     text-decoration: none;
@@ -2571,15 +2731,15 @@ body.settings-app {
 .dash-profile-btn {
     display: inline-flex;
     align-items: center;
-    gap: 10px;
-    padding: 4px 10px 4px 4px;
-    border: 1px solid var(--b2);
+    gap: 6px;
+    padding: 2px 8px 2px 2px;
+    border: 0.5px solid var(--b2);
     border-radius: 999px;
     background: var(--s2);
     cursor: pointer;
     font-family: var(--F);
     color: var(--txt);
-    max-width: min(240px, 46vw);
+    max-width: min(200px, 40vw);
     transition:
         border-color 0.15s,
         background 0.15s;
@@ -2589,13 +2749,13 @@ body.settings-app {
     background: #fff;
 }
 .dash-profile-avatar {
-    width: 34px;
-    height: 34px;
+    width: 28px;
+    height: 28px;
     border-radius: 50%;
     background: linear-gradient(145deg, var(--dash-accent2), #3b82f6);
     color: #fff;
     font-family: var(--M);
-    font-size: 13px;
+    font-size: 11px;
     font-weight: 700;
     display: flex;
     align-items: center;
@@ -2604,13 +2764,12 @@ body.settings-app {
 }
 .dash-profile-meta {
     display: flex;
-    flex-direction: column;
-    align-items: flex-start;
+    align-items: center;
     min-width: 0;
     text-align: left;
 }
 .dash-profile-name {
-    font-size: 14px;
+    font-size: 12px;
     font-weight: 600;
     line-height: 1.2;
     max-width: 100%;
@@ -2625,9 +2784,9 @@ body.settings-app {
     text-transform: capitalize;
 }
 .dash-profile-chevron {
-    font-size: 16px;
+    font-size: 14px;
     color: #64748b;
-    margin-left: 2px;
+    margin-left: 0;
     flex-shrink: 0;
     transition: transform 0.2s ease;
 }
@@ -2638,22 +2797,22 @@ body.settings-app {
     display: none;
     position: absolute;
     right: 0;
-    top: calc(100% + 8px);
-    min-width: 280px;
-    max-width: min(320px, calc(100vw - 24px));
-    padding: 8px 0;
+    top: calc(100% + 6px);
+    min-width: 220px;
+    max-width: min(260px, calc(100vw - 24px));
+    padding: 4px 0;
     background: #fff;
-    border: 1px solid var(--dash-border);
-    border-radius: 12px;
-    box-shadow: 0 12px 40px rgba(15, 23, 42, 0.12);
+    border: 0.5px solid var(--dash-border);
+    border-radius: 8px;
+    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.1);
 }
 .dash-profile-wrap.is-open .dash-profile-dd {
     display: block;
 }
 .dash-profile-dd-head {
-    padding: 6px 16px 8px;
+    padding: 4px 12px 6px;
     font-family: var(--M);
-    font-size: 11px;
+    font-size: 9px;
     font-weight: 700;
     letter-spacing: 0.08em;
     text-transform: uppercase;
@@ -2662,15 +2821,15 @@ body.settings-app {
 .dash-profile-dd-item {
     display: flex;
     align-items: flex-start;
-    gap: 12px;
+    gap: 8px;
     width: 100%;
-    padding: 10px 16px;
+    padding: 7px 12px;
     border: none;
     background: none;
     text-align: left;
     cursor: pointer;
     font-family: var(--F);
-    font-size: 14px;
+    font-size: 12px;
     color: var(--txt);
     text-decoration: none;
     box-sizing: border-box;
@@ -2680,24 +2839,24 @@ body.settings-app {
     background: var(--s2);
 }
 .dash-profile-dd-item .ti {
-    font-size: 18px;
+    font-size: 15px;
     color: var(--in);
-    margin-top: 2px;
+    margin-top: 1px;
     flex-shrink: 0;
 }
 .dash-profile-dd-item strong {
     display: block;
     font-weight: 600;
-    font-size: 14px;
-    line-height: 1.25;
+    font-size: 12px;
+    line-height: 1.2;
 }
 .dash-profile-dd-item small {
     display: block;
-    font-size: 12px;
+    font-size: 10px;
     color: #64748b;
     font-weight: 400;
-    margin-top: 2px;
-    line-height: 1.3;
+    margin-top: 1px;
+    line-height: 1.25;
 }
 .dash-profile-dd-item--danger .ti {
     color: var(--cr);
@@ -2707,7 +2866,7 @@ body.settings-app {
 }
 .dash-profile-dd-sep {
     height: 1px;
-    margin: 6px 12px;
+    margin: 4px 10px;
     background: var(--dash-border);
 }
 .dash-profile-dd-form {
@@ -2719,7 +2878,7 @@ body.settings-app {
         display: none;
     }
     .dash-profile-btn {
-        padding: 4px;
+        padding: 2px;
         max-width: none;
     }
 }
@@ -2777,6 +2936,13 @@ body.admin-app {
     flex-direction: column;
     align-items: stretch;
 }
+.admin-page-head-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    flex-shrink: 0;
+}
 .admin-page-title {
     font-family: var(--M);
     font-size: 1.5rem;
@@ -2787,7 +2953,7 @@ body.admin-app {
 }
 .admin-page-lead {
     font-size: 15px;
-    color: #64748b;
+    color: #475569;
     margin: 0;
     max-width: 52rem;
     line-height: 1.5;
@@ -2814,7 +2980,7 @@ body.admin-app {
     font-size: 14px;
     font-weight: 600;
     cursor: pointer;
-    border: 1px solid var(--b2);
+    border: 1px solid #94a3b8;
     background: var(--s2);
     color: var(--txt);
     text-decoration: none;
@@ -2823,16 +2989,21 @@ body.admin-app {
         background 0.15s;
 }
 .admin-btn:hover {
-    border-color: var(--amber);
+    border-color: #64748b;
     background: #fff;
 }
 .admin-btn--primary {
-    background: var(--amber);
-    border-color: #c65f09;
-    color: #1a1a1a;
+    background: #1564c0;
+    border-color: #124ea8;
+    color: #fff;
+    box-shadow: none;
 }
 .admin-btn--primary:hover {
-    filter: brightness(1.05);
+    background: #124a8f;
+    border-color: #0f3d75;
+    color: #fff;
+    filter: none;
+    box-shadow: none;
 }
 .admin-btn--secondary {
     background: var(--in);
@@ -2860,10 +3031,10 @@ body.admin-app {
 }
 .admin-card {
     background: #fff;
-    border: 1px solid var(--dash-border);
+    border: 1px solid #94a3b8;
     border-radius: 12px;
     padding: 20px 22px;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+    box-shadow: 0 1px 4px rgba(15, 23, 42, 0.06);
 }
 .admin-form-grid {
     display: grid;
@@ -2886,7 +3057,7 @@ body.admin-app {
     font-weight: 600;
     letter-spacing: 0.04em;
     text-transform: uppercase;
-    color: #64748b;
+    color: #1e293b;
     margin-bottom: 6px;
 }
 .admin-field input[type="text"],
@@ -2897,7 +3068,8 @@ body.admin-app {
     padding: 10px 12px;
     font-family: var(--F);
     font-size: 15px;
-    border: 1px solid var(--b2);
+    color: #0f172a;
+    border: 1px solid #94a3b8;
     border-radius: 8px;
     background: #fff;
     box-sizing: border-box;
@@ -2905,13 +3077,13 @@ body.admin-app {
 .admin-field input:focus,
 .admin-field select:focus {
     outline: none;
-    border-color: var(--in);
-    box-shadow: 0 0 0 3px var(--in3);
+    border-color: #1564c0;
+    box-shadow: 0 0 0 3px rgba(21, 100, 192, 0.15);
 }
 .admin-field-hint {
     margin: 6px 0 0;
     font-size: 13px;
-    color: #64748b;
+    color: #475569;
     line-height: 1.4;
 }
 .admin-field--check {
@@ -2945,10 +3117,10 @@ body.admin-app {
 }
 .admin-table-wrap {
     background: #fff;
-    border: 1px solid var(--dash-border);
+    border: 1px solid #94a3b8;
     border-radius: 12px;
     overflow: auto;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+    box-shadow: 0 1px 4px rgba(15, 23, 42, 0.06);
 }
 .admin-table {
     width: 100%;
@@ -2959,8 +3131,16 @@ body.admin-app {
 .admin-table td {
     padding: 12px 16px;
     text-align: left;
-    border-bottom: 1px solid var(--dash-border);
+    border-bottom: 1px solid #cbd5e1;
+    border-right: 1px solid #e2e8f0;
     vertical-align: top;
+}
+.admin-table th:last-child,
+.admin-table td:last-child {
+    border-right: none;
+}
+.admin-table tbody tr:last-child td {
+    border-bottom: none;
 }
 .admin-table th {
     font-family: var(--M);
@@ -2968,8 +3148,9 @@ body.admin-app {
     font-weight: 700;
     letter-spacing: 0.06em;
     text-transform: uppercase;
-    color: #64748b;
-    background: #f8fafc;
+    color: #475569;
+    background: #f1f5f9;
+    border-bottom: 2px solid #94a3b8;
     position: sticky;
     top: 0;
     z-index: 1;
@@ -2983,18 +3164,24 @@ body.admin-app {
     opacity: 0.65;
 }
 .admin-table-sub {
-    color: #475569;
+    color: #334155;
     font-size: 13px;
+    font-weight: 500;
+}
+.admin-table-col-room {
+    color: #1e293b;
+    font-weight: 600;
 }
 .admin-table-hint {
     display: block;
     font-size: 12px;
-    color: #94a3b8;
+    color: #475569;
+    font-weight: 500;
     margin-top: 2px;
 }
 .admin-table-empty {
     text-align: center;
-    color: #64748b;
+    color: #475569;
     padding: 28px 16px !important;
 }
 .admin-table-actions {
@@ -3051,12 +3238,24 @@ body.admin-app {
     font-size: 13px;
 }
 .admin-filters {
-    padding: 16px 18px;
+    padding: 10px 14px;
+    width: fit-content;
+    max-width: 100%;
 }
 .admin-filters-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-    gap: 16px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px 16px;
+    align-items: flex-end;
+}
+.admin-filters .admin-field {
+    min-width: 168px;
+}
+.admin-filters .admin-field label {
+    margin-bottom: 4px;
+}
+.admin-filters .admin-field select {
+    min-width: 168px;
 }
 .admin-pagination {
     margin-top: 20px;
@@ -3092,4 +3291,87 @@ body.admin-app {
 .settings-app__hdr-actions {
     gap: 10px;
     flex-wrap: wrap;
+}
+
+/* Demo roof — admin + VITE_DASHBOARD_USE_DUMMY (panel di peta 3D) */
+.scada-dashboard .dash-demo-roof {
+    position: absolute;
+    left: 12px;
+    bottom: 12px;
+    z-index: 80;
+    max-width: min(320px, calc(100% - 24px));
+    padding: 12px 14px;
+    background: rgba(255, 255, 255, 0.96);
+    border: 1px solid #cbd5e1;
+    border-radius: 10px;
+    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
+    font-family: var(--F);
+    pointer-events: auto;
+}
+.scada-dashboard .dash-demo-roof__head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 6px;
+}
+.scada-dashboard .dash-demo-roof__head .ti {
+    color: var(--amber);
+    font-size: 18px;
+}
+.scada-dashboard .dash-demo-roof__title {
+    font-family: var(--M);
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--txt);
+}
+.scada-dashboard .dash-demo-roof__badge {
+    font-size: 10px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: #fef3c7;
+    color: #92400e;
+    border: 1px solid #fcd34d;
+}
+.scada-dashboard .dash-demo-roof__label {
+    display: block;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #64748b;
+    margin-bottom: 4px;
+}
+.scada-dashboard .dash-demo-roof__select {
+    width: 100%;
+    margin-bottom: 10px;
+    padding: 8px 10px;
+    border: 1px solid var(--dash-border);
+    border-radius: 8px;
+    font-size: 13px;
+    font-family: var(--F);
+    background: #fff;
+}
+.scada-dashboard .dash-demo-roof__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+.scada-dashboard .dash-demo-roof__btn {
+    flex: 1 1 auto;
+    min-width: 4.5rem;
+    padding: 7px 10px;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    background: #f8fafc;
+    font-family: var(--M);
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--txt);
+    cursor: pointer;
+}
+.scada-dashboard .dash-demo-roof__btn:hover {
+    background: #eff6ff;
+    border-color: var(--in);
 }

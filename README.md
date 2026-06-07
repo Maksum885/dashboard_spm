@@ -14,6 +14,7 @@ Aplikasi web dibangun dengan **Laravel** (backend + API) dan **JavaScript/Vite**
 - Menampilkan **alarm aktif** (termasuk darurat dan gangguan motor) di sidebar agar cepat terlihat.
 - Menyediakan **log peristiwa** ringkas per ruang di panel detail.
 - Mendukung **pembaruan data secara berkala** dari server dan, bila dikonfigurasi, **pembaruan hampir realtime** lewat saluran broadcast ke browser.
+- Mode **data dummy** (`VITE_DASHBOARD_USE_DUMMY=true`): untuk **admin**, panel **Demo roof** di peta 3D (Close / Open per ruang, tanpa PLC).
 
 ---
 

@@ -7,13 +7,6 @@
   <header class="settings-card-head">
     <div>
       <h3 class="settings-card-room">{{ $d->testingRoom->name ?? 'Room' }}</h3>
-      <p class="settings-card-meta">
-        {{ $d->testingRoom->code ?? '—' }}
-        @if($d->testingRoom->controlRoom)
-          · {{ $d->testingRoom->controlRoom->name }}
-        @endif
-        · Room ID <strong>{{ $rid }}</strong>
-      </p>
       <p class="settings-card-seen">
         Last seen: <strong>{{ $d->last_seen_at ? $d->last_seen_at->format('d M Y, H:i') : 'Never' }}</strong>
       </p>
@@ -33,12 +26,6 @@
     @csrf
     @method('PUT')
     <div class="settings-form-grid settings-form-grid--card">
-      <div class="settings-field settings-field--wide">
-        <span class="settings-field-label">Device name</span>
-        <div class="settings-readonly-val" title="Tied to this room — no manual typing">
-          {{ $d->testingRoom->name ?? 'Room' }} <span class="settings-readonly-hint">(PLC · Room ID {{ $rid }})</span>
-        </div>
-      </div>
       <div class="settings-field settings-field--wide">
         <label for="ip-{{ $d->id }}">PLC IP address</label>
         <input id="ip-{{ $d->id }}" type="text" name="ip_address" value="{{ old('ip_address.'.$d->id, $d->ip_address) }}" required placeholder="192.168.1.10" inputmode="numeric" autocomplete="off">

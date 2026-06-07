@@ -1,22 +1,27 @@
 @extends('admin.layout')
 
-@section('title', 'Log register PLC')
+@section('title', 'PLC register log')
 
 @section('content')
 <div class="admin-page">
   <div class="admin-page-head">
     <div>
-      <h1 class="admin-page-title">Log register PLC</h1>
-      <p class="admin-page-lead">Riwayat perubahan nilai register dari bridge. Filter opsional per ruang atau tipe.</p>
+      <h1 class="admin-page-title">PLC register log</h1>
+      <p class="admin-page-lead">History of register value changes from the bridge. Optional filters by room or change type.</p>
+    </div>
+    <div class="admin-page-head-actions">
+      <a href="{{ route('dashboard') }}" class="admin-btn admin-btn--ghost">
+        <i class="ti ti-arrow-left" aria-hidden="true"></i> Back to dashboard
+      </a>
     </div>
   </div>
 
   <form method="GET" action="{{ route('admin.activity-logs.index') }}" class="admin-filters admin-card">
     <div class="admin-filters-grid">
       <div class="admin-field">
-        <label for="testing_room_id">Ruang uji</label>
+        <label for="testing_room_id">Test room</label>
         <select id="testing_room_id" name="testing_room_id" onchange="this.form.submit()">
-          <option value="">Semua</option>
+          <option value="">All</option>
           @foreach ($rooms as $tr)
             <option value="{{ $tr->id }}" @selected((string) request('testing_room_id') === (string) $tr->id)>
               {{ $tr->controlRoom->code ?? '' }} · {{ $tr->name }}
@@ -25,9 +30,9 @@
         </select>
       </div>
       <div class="admin-field">
-        <label for="change_type">Tipe perubahan</label>
+        <label for="change_type">Change type</label>
         <select id="change_type" name="change_type" onchange="this.form.submit()">
-          <option value="">Semua</option>
+          <option value="">All</option>
           @foreach ($changeTypes as $ct)
             <option value="{{ $ct }}" @selected(request('change_type') === $ct)>{{ $ct }}</option>
           @endforeach
@@ -40,11 +45,11 @@
     <table class="admin-table admin-table--compact">
       <thead>
         <tr>
-          <th>Waktu</th>
-          <th>Ruang</th>
+          <th>Time</th>
+          <th>Room</th>
           <th>Register</th>
-          <th>Nilai</th>
-          <th>Tipe</th>
+          <th>Value</th>
+          <th>Type</th>
         </tr>
       </thead>
       <tbody>
@@ -52,12 +57,7 @@
           <tr>
             <td class="admin-nowrap">{{ $log->occurred_at?->timezone(config('app.timezone'))->format('Y-m-d H:i:s') }}</td>
             <td>{{ $log->testingRoom->name ?? '—' }}</td>
-            <td>
-              <span class="admin-mono">{{ $log->register_name ?: $log->register_address }}</span>
-              @if($log->register_description)
-                <span class="admin-table-hint">{{ \Illuminate\Support\Str::limit($log->register_description, 40) }}</span>
-              @endif
-            </td>
+            <td class="admin-table-sub">{{ \Illuminate\Support\Str::limit($log->displayRegisterLabel(), 56) }}</td>
             <td class="admin-table-sub">
               @if($log->old_value !== null || $log->new_value !== null)
                 <span class="admin-mono">{{ $log->old_value }} → {{ $log->new_value }}</span>
@@ -71,7 +71,7 @@
           </tr>
         @empty
           <tr>
-            <td colspan="5" class="admin-table-empty">Belum ada entri log.</td>
+            <td colspan="5" class="admin-table-empty">No log entries yet.</td>
           </tr>
         @endforelse
       </tbody>

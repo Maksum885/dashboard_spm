@@ -116,21 +116,16 @@ export function createDashboardThreeScene({
     const BODIES = [];
 
     /**
-     * Atap pelana terbagi 2: animasi geser kiri/kanan untuk akses crane dari atas.
+     * Atap pelana (segitiga) terbagi 2: geser kiri/kanan saat OPEN.
      * Target buka/tutup dihitung dari data ruangan (fase/status uji).
      */
     const roofActuators = new Map();
 
-    /** Target geser atap 0=tutup penuh, 1=buka penuh, 0.5=STANDBY */
+    /** 0 = tutup, 1 = buka (hanya OPEN/CLOSE). */
     function roofSlideTarget01(room) {
         if (!room) return 0;
-        if (room.roof_state === 'OPEN') return 1;
-        if (room.roof_state === 'STANDBY') return 0.5;
-        if (room.roof_state === 'CLOSE') return 0;
-        const ph = room.phase;
-        const st = room.st;
-        if (ph === 'IDLE' || ph === 'STANDBY' || ph === 'SETUP' || ph === 'COMPLETE') return 1;
-        if (st === 'STANDBY') return 1;
+        if (room.reg_roof_open || room.roof_state === 'OPEN' || room.roof_moving_open) return 1;
+        if (room.reg_roof_closed || room.roof_state === 'CLOSE' || room.roof_moving_close) return 0;
         return 0;
     }
 
@@ -176,6 +171,7 @@ export function createDashboardThreeScene({
             open01: 0,
         });
     }
+
     const addm = (geo, mat, x, y, z, rx = 0, ry = 0, rz = 0) => {
         const me = new THREE.Mesh(geo, mat);
         me.position.set(x, y, z);
@@ -356,12 +352,13 @@ export function createDashboardThreeScene({
     addRetractableGableRoof('cell5', 1.8, -10, 6.5, 6, 3.0);
     building('cell4', 1.8, -3.8, 6.5, 6, 3.0, RW(), 0xa83848, { face: 'front', off: 2.2 }, null);
     addRetractableGableRoof('cell4', 1.8, -3.8, 6.5, 6, 3.0);
-    building('pit1', 10.8, -9, 4.5, 7, 3.0, RW(), 0xa83848, { face: 'front', off: -1.3 }, null);
+    /* Pit 1 = kanan (15.5), Pit 2 = kiri (10.8) — penamaan ditukar vs layout lama. */
+    building('pit2', 10.8, -9, 4.5, 7, 3.0, RW(), 0xa83848, { face: 'front', off: -1.3 }, null);
     addInnerColumns(10.8, -9, 4.5, 7.0, 3.0);
-    addRetractableGableRoof('pit1', 10.8, -9, 4.5, 7, 3.0);
-    building('pit2', 15.5, -9, 4.5, 7, 3.0, RW(), 0xa83848, { face: 'front', off: 1.3 }, null);
+    addRetractableGableRoof('pit2', 10.8, -9, 4.5, 7, 3.0);
+    building('pit1', 15.5, -9, 4.5, 7, 3.0, RW(), 0xa83848, { face: 'front', off: 1.3 }, null);
     addInnerColumns(15.5, -9, 4.5, 7.0, 3.0);
-    addRetractableGableRoof('pit2', 15.5, -9, 4.5, 7, 3.0);
+    addRetractableGableRoof('pit1', 15.5, -9, 4.5, 7, 3.0);
     building('cr1', 10.5, 1.5, 4.0, 2.0, 2.0, CRW_BLUE(), 0x1a8fff, { face: 'front', off: 0.7 }, { face: 'front', count: 2 });
     building('cr2', 15.5, 1.5, 4.0, 2.0, 2.0, CRW_BLUE(), 0x1a8fff, { face: 'front', off: 0.7 }, { face: 'front', count: 2 });
     building('pit5', -12.3, 11, 5.8, 6.5, 3.0, GW(), 0x4a8460, null, null);
@@ -387,8 +384,8 @@ export function createDashboardThreeScene({
         { id: 'pit6', anchor: new THREE.Vector3(-6.2, 3.2, 11), t: 'TEST PIT 6', ox: -215, oy: -25, by: -25 },
         { id: 'cell5', anchor: new THREE.Vector3(1.8, 3.2, -10), t: 'TEST CELL 5', ox: 80, oy: -120, by: -120 },
         { id: 'cell4', anchor: new THREE.Vector3(1.8, 3.2, -3.8), t: 'TEST CELL 4', ox: 160, oy: -60, by: -60 },
-        { id: 'pit1', anchor: new THREE.Vector3(10.8, 3.2, -9), t: 'TEST PIT 1', ox: 90, oy: -50, by: -50 },
-        { id: 'pit2', anchor: new THREE.Vector3(15.5, 3.2, -9), t: 'TEST PIT 2', ox: 80, oy: -40, by: -40 },
+        { id: 'pit2', anchor: new THREE.Vector3(10.8, 3.2, -9), t: 'TEST PIT 2', ox: 90, oy: -50, by: -50 },
+        { id: 'pit1', anchor: new THREE.Vector3(15.5, 3.2, -9), t: 'TEST PIT 1', ox: 80, oy: -40, by: -40 },
         { id: 'cell3', anchor: new THREE.Vector3(1.8, 3.2, 13), t: 'TEST CELL 3', ox: -70, oy: 110, by: 0 },
         { id: 'cell2', anchor: new THREE.Vector3(8.6, 3.2, 13), t: 'TEST CELL 2', ox: -70, oy: 125, by: 0 },
         { id: 'cell1', anchor: new THREE.Vector3(15.5, 3.2, 13), t: 'TEST CELL 1', ox: -70, oy: 130, by: 0 },
@@ -432,7 +429,7 @@ export function createDashboardThreeScene({
                 tipEl.style.color = isCR ? '#1564c0' : d.col;
                 const roomD = isCR ? null : findRoom(id);
                 const label = roomD ? `${roomD.nm}` : d.nm;
-                tipEl.textContent = `${label} · Click for details`;
+                tipEl.innerHTML = `<span class="tip-title">${label}</span><span class="tip-hint">Click for details</span>`;
                 tipEl.style.left = `${e.clientX + 14}px`;
                 tipEl.style.top = `${e.clientY - 14}px`;
                 tipEl.style.opacity = '1';
@@ -495,8 +492,9 @@ export function createDashboardThreeScene({
             const room = findRoom(buildingId);
             const target = roofSlideTarget01(room);
             rec.open01 = THREE.MathUtils.lerp(rec.open01, target, 0.06);
-            rec.left.position.x = rec.baseLX - rec.slide * rec.open01;
-            rec.right.position.x = rec.baseRX + rec.slide * rec.open01;
+            const t = rec.slide * rec.open01;
+            rec.left.position.x = rec.baseLX - t;
+            rec.right.position.x = rec.baseRX + t;
         });
 
         LBLS.forEach((lb) => {

@@ -17,26 +17,25 @@
     <img src="{{ asset('images/logospm1.png') }}" alt="SPM Oil &amp; Gas" class="logo-img">
   </a>
   <div class="hdr-r dash-topbar-actions settings-app__hdr-actions">
-    <a href="{{ route('dashboard') }}" class="hdr-btn" title="Dashboard"><i class="ti ti-layout-dashboard"></i><span class="hdr-btn-lbl">Dashboard</span></a>
     @include('partials.profile-menu')
   </div>
 </header>
 
 <main class="settings-layout">
-  <h1 class="settings-page-title">Settings</h1>
-  <p class="settings-page-lead">Manage how each test room talks to its PLC. Changes here are saved to the server only.</p>
+  <div class="admin-page-head admin-page-head--stack">
+    <div>
+      <h1 class="settings-page-title">Settings</h1>
+      <p class="settings-page-lead">Manage how each test room talks to its PLC. Changes here are saved to the server only.</p>
+    </div>
+    <div class="admin-page-head-actions">
+      <a href="{{ route('dashboard') }}" class="admin-btn admin-btn--ghost">
+        <i class="ti ti-arrow-left" aria-hidden="true"></i> Back to dashboard
+      </a>
+    </div>
+  </div>
 
   <section class="settings-section" aria-labelledby="plc-heading">
     <h2 id="plc-heading" class="settings-section-title"><i class="ti ti-plug-connected" aria-hidden="true"></i> PLC connection</h2>
-
-    <div class="settings-help" role="note">
-      <strong>How it works</strong>
-      <ul class="settings-help-list">
-        <li><strong>Ethernet cable alone</strong> does not connect this app to the PLC. You must <strong>Save</strong> the correct IP/port/unit here, then run the <strong>Python Modbus bridge</strong> on a computer that can ping the PLC. The bridge opens the TCP connection and sends data to Laravel.</li>
-        <li>There is <strong>no separate “Connect” button</strong> in the browser: when the bridge polls successfully, the room shows <strong>Online</strong> and “Last seen” updates.</li>
-        <li><strong>Device name</strong> is fixed to the room (Test Pit / Test Cell) so labels cannot be mistyped.</li>
-      </ul>
-    </div>
 
     @if (session('status'))
       <div class="settings-flash" role="status">{{ session('status') }}</div>
