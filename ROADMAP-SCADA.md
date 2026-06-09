@@ -24,6 +24,16 @@ Dokumen ini merapikan rencana perbaikan agar transisi dari mode simulasi ke mode
 - [x] Integrasikan broadcast (Echo/Pusher) — event `PlcRoomUpdated` + subscribe channel `plc.room.{id}` (isi `VITE_PUSHER_*` + `BROADCAST_CONNECTION=pusher`).
 - [ ] Tambahkan badge role di UI untuk membedakan `admin/operator/viewer`.
 
+## 3b) Computer Vision & Kamera
+
+- [x] Tabel `room_cameras` (2 slot per ruang) + seeder + Settings `/settings/cameras`.
+- [x] Bridge API `GET /api/cv/bridge-cameras` untuk service Python `camera/`.
+- [x] Flask multi-room: RTSP, YOLO, MJPEG `/stream/{room}/{slot}`, `/alarm_status`.
+- [x] Dashboard: `VITE_CV_*`, stream per ruang, alarm human di sidebar.
+- [x] Mode dummy: feed DEMO, panel Demo CV, alarm contoh + ACK.
+- [ ] Status koneksi RTSP per kamera di Settings (online/offline).
+- [ ] Simpan log alarm human ke database (bukan hanya in-memory / polling).
+
 ## 4) Auth & Authorization
 
 - [ ] Tambahkan auto-expire token + kebijakan rotasi token.

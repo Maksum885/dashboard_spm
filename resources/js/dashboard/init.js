@@ -2,6 +2,7 @@ import { getDashboardData } from '../services/dashboardData.js';
 import { store } from './state.js';
 import { createDashboardThreeScene } from '../three/scene.js';
 import { initDemoRoofControls } from './demoRoofControls.js';
+import { initDemoCvControls } from './demoCvControls.js';
 import * as Main from './main.js';
 
 export async function initDashboard() {
@@ -13,9 +14,11 @@ export async function initDashboard() {
     Main.initOptionalTabs();
     Main.initLogoFallback();
     Main.buildSidebarRooms();
+    Main.initCvMonitoring();
     Main.updateAlarmSidebar();
     Main.updateUtilSidebar();
     initDemoRoofControls(Main);
+    initDemoCvControls(Main);
 
     const three = createDashboardThreeScene({
         canvas: document.getElementById('cv'),

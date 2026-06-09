@@ -1130,6 +1130,13 @@ body.scada-dashboard {
     white-space: nowrap;
 }
 .rp-plc-strip__link--pane {
+    margin-bottom: 0;
+}
+.rp-pane-settings-links {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px;
     margin-bottom: 10px;
 }
 .rp-plc-strip__link:hover {
@@ -2198,6 +2205,36 @@ body.scada-dashboard {
     font-size: 22px;
     color: #4b5563;
 }
+.scada-dashboard .cam-v2--off {
+    flex-direction: column;
+    gap: 6px;
+    background: #1a1a1a;
+}
+.scada-dashboard .cam-v2--off .ti {
+    font-size: 28px;
+    color: #6b7280;
+}
+.scada-dashboard .cam-v2-off-msg {
+    font-size: 11px;
+    color: #9ca3af;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+}
+.scada-dashboard .cam-v2--disabled {
+    flex-direction: column;
+    gap: 6px;
+    background: #1a1a1a;
+}
+.scada-dashboard .cam-v2--disabled .ti {
+    font-size: 28px;
+    color: #6b7280;
+}
+.scada-dashboard .cam-stream {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
 .scada-dashboard .cam-v2-lbl {
     position: absolute;
     bottom: 5px;
@@ -2716,6 +2753,26 @@ body.settings-app {
 .settings-save-btn:hover {
     background: #124a8f;
     border-color: #0f3d75;
+}
+.settings-camera-slot {
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 0.5px solid var(--dash-border);
+}
+.settings-camera-slot:first-of-type {
+    margin-top: 12px;
+    padding-top: 0;
+    border-top: none;
+}
+.settings-camera-slot__title {
+    margin: 0 0 10px;
+    font-family: var(--M);
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--txt);
+    display: flex;
+    align-items: center;
+    gap: 8px;
 }
 .scada-dashboard .hdr-btn.dash-btn-settings {
     text-decoration: none;
@@ -3293,12 +3350,18 @@ body.admin-app {
     flex-wrap: wrap;
 }
 
-/* Demo roof — admin + VITE_DASHBOARD_USE_DUMMY (panel di peta 3D) */
+/* Demo panels — admin + VITE_DASHBOARD_USE_DUMMY (peta 3D) */
+.scada-dashboard .dash-demo-panel,
 .scada-dashboard .dash-demo-roof {
-    position: absolute;
-    left: 12px;
     bottom: 12px;
     z-index: 80;
+}
+.scada-dashboard .dash-demo-cv {
+    bottom: 168px;
+    z-index: 81;
+}
+.scada-dashboard .dash-demo-panel,
+.scada-dashboard .dash-demo-roof {
     max-width: min(320px, calc(100% - 24px));
     padding: 12px 14px;
     background: rgba(255, 255, 255, 0.96);
@@ -3308,6 +3371,7 @@ body.admin-app {
     font-family: var(--F);
     pointer-events: auto;
 }
+.scada-dashboard .dash-demo-panel__head,
 .scada-dashboard .dash-demo-roof__head {
     display: flex;
     align-items: center;
@@ -3315,16 +3379,22 @@ body.admin-app {
     flex-wrap: wrap;
     margin-bottom: 6px;
 }
+.scada-dashboard .dash-demo-panel__head .ti,
 .scada-dashboard .dash-demo-roof__head .ti {
     color: var(--amber);
     font-size: 18px;
 }
+.scada-dashboard .dash-demo-cv .dash-demo-panel__head .ti {
+    color: var(--in);
+}
+.scada-dashboard .dash-demo-panel__title,
 .scada-dashboard .dash-demo-roof__title {
     font-family: var(--M);
     font-size: 13px;
     font-weight: 700;
     color: var(--txt);
 }
+.scada-dashboard .dash-demo-panel__badge,
 .scada-dashboard .dash-demo-roof__badge {
     font-size: 10px;
     font-weight: 600;
@@ -3334,6 +3404,7 @@ body.admin-app {
     color: #92400e;
     border: 1px solid #fcd34d;
 }
+.scada-dashboard .dash-demo-panel__label,
 .scada-dashboard .dash-demo-roof__label {
     display: block;
     font-size: 10px;
@@ -3343,6 +3414,7 @@ body.admin-app {
     color: #64748b;
     margin-bottom: 4px;
 }
+.scada-dashboard .dash-demo-panel__select,
 .scada-dashboard .dash-demo-roof__select {
     width: 100%;
     margin-bottom: 10px;
@@ -3353,11 +3425,13 @@ body.admin-app {
     font-family: var(--F);
     background: #fff;
 }
+.scada-dashboard .dash-demo-panel__actions,
 .scada-dashboard .dash-demo-roof__actions {
     display: flex;
     flex-wrap: wrap;
     gap: 6px;
 }
+.scada-dashboard .dash-demo-panel__btn,
 .scada-dashboard .dash-demo-roof__btn {
     flex: 1 1 auto;
     min-width: 4.5rem;
@@ -3371,7 +3445,63 @@ body.admin-app {
     color: var(--txt);
     cursor: pointer;
 }
+.scada-dashboard .dash-demo-panel__btn:hover,
 .scada-dashboard .dash-demo-roof__btn:hover {
     background: #eff6ff;
     border-color: var(--in);
+}
+.scada-dashboard .dash-demo-panel__btn--alert {
+    background: #fef2f2;
+    border-color: #fecaca;
+    color: #b91c1c;
+}
+.scada-dashboard .dash-demo-panel__btn--alert:hover {
+    background: #fee2e2;
+    border-color: #f87171;
+}
+.scada-dashboard .cam-v2--dummy {
+    background: #0f172a;
+}
+.scada-dashboard .cam-dummy-feed {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+}
+.scada-dashboard .cam-dummy-feed__grid {
+    position: absolute;
+    inset: 0;
+    background: repeating-linear-gradient(
+        0deg,
+        rgba(255, 255, 255, 0.03) 0,
+        rgba(255, 255, 255, 0.03) 1px,
+        transparent 1px,
+        transparent 4px
+    );
+    opacity: 0.6;
+}
+.scada-dashboard .cam-dummy-feed__icon,
+.scada-dashboard .cam-dummy-feed__person {
+    font-size: 36px;
+    color: #475569;
+    z-index: 1;
+}
+.scada-dashboard .cam-v2--dummy-human .cam-dummy-feed__person {
+    color: #22c55e;
+    filter: drop-shadow(0 0 8px rgba(34, 197, 94, 0.5));
+}
+.scada-dashboard .cam-dummy-feed__tag {
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    z-index: 2;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    color: #94a3b8;
+    background: rgba(15, 23, 42, 0.7);
+    padding: 2px 6px;
+    border-radius: 3px;
 }

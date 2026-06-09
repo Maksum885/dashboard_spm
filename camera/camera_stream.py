@@ -1,235 +1,78 @@
+"""
+Flask CV service: multi-room RTSP streams + YOLO person detection.
+
+Streams:  GET /stream/<room_id>/<slot>
+Alarms:   GET /alarm_status
+Health:   GET /health
+"""
+
+from __future__ import annotations
+
+import logging
 import os
-import cv2
-import time
 import threading
+import time
 
 from flask import Flask, Response, jsonify
 from flask_cors import CORS
-from yolo_detector import detect_person
 
-# =====================================
-# FORCE RTSP TCP
-# =====================================
-os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = "rtsp_transport;tcp"
+from camera_loader import load_cameras_sync
+from camera_manager import CameraManager
+from config import CV_HOST, CV_MAP_REFRESH_SEC, CV_PORT, RTSP_TRANSPORT
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+)
+logger = logging.getLogger("cv.app")
+
+os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = f"rtsp_transport;{RTSP_TRANSPORT}"
 
 app = Flask(__name__)
-
 CORS(app)
 
-# =====================================
-# CAMERA CONFIG
-# =====================================
-USERNAME = "admin"
-PASSWORD = "Multimitraguna99"
-IP_CAMERA = "192.168.1.64"
-
-RTSP_URL = (
-    f"rtsp://{USERNAME}:{PASSWORD}"
-    f"@{IP_CAMERA}:554/Streaming/Channels/102"
-)
-
-# =====================================
-# GLOBALS
-# =====================================
-latest_frame = None
-camera = None
-
-frame_lock = threading.Lock()
-
-person_detected = False
-frame_counter = 0
-
-# =====================================
-# CONNECT CAMERA
-# =====================================
-def create_camera():
-
-    print("🔄 Connecting camera...")
-
-    cap = cv2.VideoCapture(
-        RTSP_URL,
-        cv2.CAP_FFMPEG
-    )
-
-    cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
-
-    time.sleep(1)
-
-    if cap.isOpened():
-        print("✅ Kamera berhasil connect")
-    else:
-        print("❌ Kamera gagal connect")
-
-    return cap
+manager = CameraManager()
 
 
-# =====================================
-# CAMERA THREAD
-# =====================================
-def camera_worker():
-
-    global camera
-    global latest_frame
-    global person_detected
-    global frame_counter
-
-    camera = create_camera()
-
+def _refresh_loop() -> None:
     while True:
-
-        try:
-
-            if camera is None or not camera.isOpened():
-
-                try:
-                    camera.release()
-                except:
-                    pass
-
-                camera = None
-
-                time.sleep(2)
-
-                camera = create_camera()
-                continue
-
-            success, frame = camera.read()
-
-            if not success or frame is None:
-
-                print("⚠️ Frame gagal, reconnect...")
-
-                try:
-                    camera.release()
-                except:
-                    pass
-
-                camera = None
-
-                time.sleep(2)
-
-                camera = create_camera()
-                continue
-
-            # =========================
-            # YOLO DETECTION
-            # =========================
-            frame_counter += 1
-
-            if frame_counter % 5 == 0:
-
-                frame, detected = detect_person(frame)
-
-                person_detected = detected
-
-            # =========================
-            # SAVE FRAME
-            # =========================
-            with frame_lock:
-                latest_frame = frame.copy()
-
-        except Exception as e:
-
-            print("❌ Camera Error:", e)
-
-            try:
-                camera.release()
-            except:
-                pass
-
-            camera = None
-
-            time.sleep(2)
-
-            camera = create_camera()
+        manager.refresh(load_cameras_sync())
+        time.sleep(CV_MAP_REFRESH_SEC)
 
 
-# =====================================
-# MJPEG STREAM
-# =====================================
-def generate_frames():
-
-    global latest_frame
-
-    while True:
-
-        try:
-
-            if latest_frame is None:
-                time.sleep(0.05)
-                continue
-
-            with frame_lock:
-                frame = latest_frame.copy()
-
-            success, buffer = cv2.imencode(
-                ".jpg",
-                frame,
-                [cv2.IMWRITE_JPEG_QUALITY, 70]
-            )
-
-            if not success:
-                continue
-
-            yield (
-                b"--frame\r\n"
-                b"Content-Type: image/jpeg\r\n\r\n"
-                + buffer.tobytes()
-                + b"\r\n"
-            )
-
-            time.sleep(0.03)
-
-        except GeneratorExit:
-            break
-
-        except Exception as e:
-
-            print("❌ Stream Error:", e)
-            time.sleep(1)
-
-
-# =====================================
-# ROUTES
-# =====================================
 @app.route("/")
 def home():
+    return "SPM Testing Bay CV service running"
 
-    return "Flask CCTV + YOLO Active"
+
+@app.route("/health")
+def health():
+    rooms = manager.alarm_status()
+    stream_count = sum(len(slots) for slots in rooms.values())
+    return jsonify({"ok": True, "streams": stream_count})
 
 
-@app.route("/camera1")
-def camera1():
-
+@app.route("/stream/<int:room_id>/<int:slot>")
+def stream(room_id: int, slot: int):
     return Response(
-        generate_frames(),
-        mimetype="multipart/x-mixed-replace; boundary=frame"
+        manager.generate_mjpeg(room_id, slot),
+        mimetype="multipart/x-mixed-replace; boundary=frame",
     )
 
 
 @app.route("/alarm_status")
 def alarm_status():
-
-    return jsonify({
-        "person_detected": person_detected
-    })
+    return jsonify({"ok": True, "rooms": manager.alarm_status()})
 
 
-# =====================================
-# START
-# =====================================
+# Legacy route kept for older dashboard builds during transition.
+@app.route("/camera1")
+def camera1_legacy():
+    return stream(1, 1)
+
+
 if __name__ == "__main__":
-
-    threading.Thread(
-        target=camera_worker,
-        daemon=True
-    ).start()
-
-    print("🚀 Starting Flask YOLO...")
-
-    app.run(
-        host="192.168.1.100",
-        port=5000,
-        threaded=True,
-        debug=False
-    )
+    manager.refresh(load_cameras_sync())
+    threading.Thread(target=_refresh_loop, name="cv-map-refresh", daemon=True).start()
+    logger.info("Starting CV service on %s:%s", CV_HOST, CV_PORT)
+    app.run(host=CV_HOST, port=CV_PORT, threaded=True, debug=False)

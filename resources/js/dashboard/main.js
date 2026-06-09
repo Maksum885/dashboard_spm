@@ -5,6 +5,22 @@ let cameraStream = null;
 let isRefreshingRoom = false;
 let isRefreshingDashboard = false;
 let plcEchoChannelName = null;
+/** roomId:slot -> person detected (from /alarm_status). */
+let cvDetections = {};
+let cvPollTimer = null;
+
+function cvEnabled() {
+    return import.meta.env.VITE_CV_ENABLED === "true";
+}
+
+function cvBaseUrl() {
+    return String(import.meta.env.VITE_CV_BASE_URL || "").replace(/\/$/, "");
+}
+
+/** Live CV service atau demo CV (dummy dashboard). */
+function cvUiActive() {
+    return cvEnabled() || useDummyDashboard();
+}
 
 /** ACK alarm demo (VITE_DASHBOARD_USE_DUMMY) — hanya di memori; hilang setelah refresh halaman. */
 const dummyAlarmAcks = new Map();
@@ -44,6 +60,27 @@ function canShowPlcSettingsLink(user) {
     return Boolean(user && user.role === "admin");
 }
 
+function canShowCameraSettingsLink(user) {
+    return Boolean(user && user.role === "admin");
+}
+
+function renderRoomSettingsLinksHtml(user, room) {
+    if (!room?.api_room_id) return "";
+    const links = [];
+    if (canShowPlcSettingsLink(user)) {
+        links.push(
+            `<a class="rp-plc-strip__link rp-plc-strip__link--pane" href="/settings/plc?testing_room_id=${room.api_room_id}"><i class="ti ti-settings"></i> PLC</a>`,
+        );
+    }
+    if (canShowCameraSettingsLink(user)) {
+        links.push(
+            `<a class="rp-plc-strip__link rp-plc-strip__link--pane" href="/settings/cameras?testing_room_id=${room.api_room_id}"><i class="ti ti-video"></i> Cameras</a>`,
+        );
+    }
+    if (!links.length) return "";
+    return `<div class="rp-pane-settings-links">${links.join("")}</div>`;
+}
+
 function renderPlcStatusBadge(status) {
     const st = status || "offline";
     const isOnline = st === "online";
@@ -62,10 +99,13 @@ function updateRoomPlcStrip(room) {
         el.classList.remove("is-hidden");
         const st = room.plc_link_status || "offline";
         const badge = renderPlcStatusBadge(st);
-        const settingsLink = canShowPlcSettingsLink(u)
-            ? `<a class="rp-plc-strip__link" href="/settings/plc?testing_room_id=${room.api_room_id}"><i class="ti ti-settings"></i> Settings</a><span class="rp-plc-strip__sep" aria-hidden="true">·</span>`
+        const plcLink = canShowPlcSettingsLink(u)
+            ? `<a class="rp-plc-strip__link" href="/settings/plc?testing_room_id=${room.api_room_id}"><i class="ti ti-settings"></i> PLC</a><span class="rp-plc-strip__sep" aria-hidden="true">·</span>`
             : "";
-        el.innerHTML = `${settingsLink}${badge}`;
+        const cameraLink = canShowCameraSettingsLink(u)
+            ? `<a class="rp-plc-strip__link" href="/settings/cameras?testing_room_id=${room.api_room_id}"><i class="ti ti-video"></i> Cameras</a><span class="rp-plc-strip__sep" aria-hidden="true">·</span>`
+            : "";
+        el.innerHTML = `${plcLink}${cameraLink}${badge}`;
     } else {
         el.classList.add("is-hidden");
         el.innerHTML = "";
@@ -221,6 +261,100 @@ export function renderRoomPanelPanes(r, crId) {
     renderPaneLog(r);
 }
 
+function defaultRoomCameras() {
+    return [
+        { slot: 1, name: "Kamera 1", enabled: false },
+        { slot: 2, name: "Kamera 2", enabled: false },
+    ];
+}
+
+function isCvHumanDetected(room, slot) {
+    if (!room) return false;
+    const key = cvDetectionKeyForRoom(room, slot);
+    return Boolean(cvDetections[key]);
+}
+
+function renderCameraTile(cam, room) {
+    const label = cam.name || `Kamera ${cam.slot}`;
+    if (!cvUiActive()) {
+        return `
+  <div class="cam-v2 cam-v2--off">
+    <i class="ti ti-video-off" aria-hidden="true"></i>
+    <span class="cam-v2-off-msg">CV disabled</span>
+    <span class="cam-v2-lbl">${label}</span>
+  </div>`;
+    }
+    if (!cam.enabled) {
+        return `
+  <div class="cam-v2 cam-v2--disabled">
+    <i class="ti ti-video-off" aria-hidden="true"></i>
+    <span class="cam-v2-off-msg">Camera off</span>
+    <span class="cam-v2-lbl">${label}</span>
+  </div>`;
+    }
+    if (useDummyDashboard()) {
+        const human = isCvHumanDetected(room, cam.slot);
+        return `
+  <div class="cam-v2 cam-v2--dummy${human ? " cam-v2--dummy-human" : ""}">
+    <div class="cam-dummy-feed" aria-hidden="true">
+      <span class="cam-dummy-feed__grid"></span>
+      ${human ? '<i class="ti ti-user cam-dummy-feed__person"></i>' : '<i class="ti ti-video cam-dummy-feed__icon"></i>'}
+      <span class="cam-dummy-feed__tag">DEMO</span>
+    </div>
+    <span class="cam-v2-lbl">${label}</span>
+    <span class="cam-live">
+      <span class="cam-live-dot"></span>
+      DEMO
+    </span>
+  </div>`;
+    }
+    if (!room?.api_room_id) {
+        return `
+  <div class="cam-v2 cam-v2--disabled">
+    <i class="ti ti-video-off" aria-hidden="true"></i>
+    <span class="cam-v2-off-msg">Camera off</span>
+    <span class="cam-v2-lbl">${label}</span>
+  </div>`;
+    }
+    const src = `${cvBaseUrl()}/stream/${room.api_room_id}/${cam.slot}`;
+    return `
+  <div class="cam-v2">
+    <img src="${src}" class="cam-stream" alt="${label}">
+    <span class="cam-v2-lbl">${label}</span>
+    <span class="cam-live">
+      <span class="cam-live-dot"></span>
+      LIVE
+    </span>
+  </div>`;
+}
+
+function renderCameraSectionHtml(room) {
+    const cams = room?.cameras?.length ? room.cameras : defaultRoomCameras();
+    const hasLive = cvUiActive() && cams.some((c) => c.enabled);
+    const wideOn = ui.cameraWide ? "true" : "false";
+    const wideIco = ui.cameraWide ? "ti ti-arrows-minimize" : "ti ti-arrows-maximize";
+    const wideBtn = hasLive
+        ? `<button
+    type="button"
+    class="btn-cam-wide${ui.cameraWide ? " is-active" : ""}"
+    id="btn-cam-wide"
+    onclick="toggleCameraWide()"
+    aria-pressed="${wideOn}"
+    title="Use map area for larger video">
+    <i class="${wideIco}" aria-hidden="true"></i>
+    Wide view
+  </button>`
+        : "";
+    return `
+<div class="cam-toolbar-v2">
+  <div class="section-label cam-toolbar-v2__title">Kamera</div>
+  ${wideBtn}
+</div>
+<div class="cam-grid-v2">
+  ${cams.map((cam) => renderCameraTile(cam, room)).join("")}
+</div>`;
+}
+
 function syncCameraWideClass() {
     const rp = document.getElementById("rpanel");
     if (!rp || !rp.classList.contains("open")) return;
@@ -246,12 +380,7 @@ export function toggleCameraWide() {
 
 function renderPaneOverview(r, crId) {
     const u = typeof window.__SCADA_USER__ !== "undefined" ? window.__SCADA_USER__ : null;
-    const plcLink =
-        canShowPlcSettingsLink(u) && r.api_room_id
-            ? `<a class="rp-plc-strip__link rp-plc-strip__link--pane" href="/settings/plc?testing_room_id=${r.api_room_id}"><i class="ti ti-settings"></i> Settings</a>`
-            : "";
-    const wideOn = ui.cameraWide ? "true" : "false";
-    const wideIco = ui.cameraWide ? "ti ti-arrows-minimize" : "ti ti-arrows-maximize";
+    const settingsLinks = renderRoomSettingsLinksHtml(u, r);
     const p1 = Number(r.pres_bbm ?? r.test_pressure ?? 0);
     const p2 = Number(r.pres_2 ?? 0);
     const maint = r.mode === "MAINTENANCE";
@@ -262,57 +391,8 @@ function renderPaneOverview(r, crId) {
     const emergOn = plcRegistersTrusted(r) && Boolean(r.alarm_emergency);
 
     document.getElementById("pane-o").innerHTML = `
-  ${plcLink}
-<div class="cam-toolbar-v2">
-  <div class="section-label cam-toolbar-v2__title">Kamera</div>
-
-  <button
-    type="button"
-    class="btn-cam-wide${ui.cameraWide ? " is-active" : ""}"
-    id="btn-cam-wide"
-    onclick="toggleCameraWide()"
-    aria-pressed="${wideOn}"
-    title="Use map area for larger video (e.g. computer vision)">
-
-    <i class="${wideIco}" aria-hidden="true"></i>
-    Wide view
-  </button>
-</div>
-
-<div class="cam-grid-v2">
-
-  <!-- Kamera 1 -->
-  <div class="cam-v2">
-    <img
-      src="http://192.168.1.100:5000/camera1"
-      class="cam-stream"
-      alt="Kamera 1">
-
-    <span class="cam-v2-lbl">Kamera 1</span>
-
-    <span class="cam-live">
-      <span class="cam-live-dot"></span>
-      LIVE
-    </span>
-  </div>
-
-  <!-- Kamera 2 (sementara menggunakan stream yang sama) -->
-  <div class="cam-v2">
-    <img
-      src="http://192.168.1.100:5000/camera1"
-      class="cam-stream"
-      alt="Kamera 2">
-
-    <span class="cam-v2-lbl">Kamera 2</span>
-
-    <span class="cam-live">
-      <span class="cam-live-dot"></span>
-      LIVE
-    </span>
-  </div>
-
-</div>
-</div>
+  ${settingsLinks}
+  ${renderCameraSectionHtml(r)}
   <div class="rp-overview-block">
     <div class="section-label">Pressure</div>
     <div class="sensor-grid-v2">
@@ -389,16 +469,21 @@ const DUMMY_ALARM_LABELS = {
     left_motor: "LEFT MOTOR FAIL",
     right_motor: "RIGHT MOTOR FAIL",
     motor: "MOTOR FAIL",
+    human_1: "HUMAN — Kamera 1",
+    human_2: "HUMAN — Kamera 2",
 };
 
 /**
  * Acknowledge alarm di mode dummy (in-memory). Setelah refresh browser, data dummy asli kembali.
  */
 export function ackDummyRoomAlarm(roomId, alarmKey) {
-    if (!useDummyDashboard() || !roomId || !DUMMY_ALARM_LABELS[alarmKey]) return;
+    if (!useDummyDashboard() || !roomId) return;
 
     const room = findRoom(roomId);
     if (!room) return;
+
+    const isHumanAlarm = alarmKey === "human_1" || alarmKey === "human_2";
+    if (!isHumanAlarm && !DUMMY_ALARM_LABELS[alarmKey]) return;
 
     if (!dummyAlarmAcks.has(roomId)) dummyAlarmAcks.set(roomId, new Set());
     dummyAlarmAcks.get(roomId).add(alarmKey);
@@ -419,13 +504,20 @@ export function ackDummyRoomAlarm(roomId, alarmKey) {
         case "motor":
             room.alarm_motor = false;
             break;
+        case "human_1":
+            delete cvDetections[cvDetectionKey(roomId, 1)];
+            break;
+        case "human_2":
+            delete cvDetections[cvDetectionKey(roomId, 2)];
+            break;
     }
 
+    const ackLabel = DUMMY_ALARM_LABELS[alarmKey] || alarmKey;
     if (!Array.isArray(room.events)) room.events = [];
     room.events.unshift({
         t: getNow(),
         c: "ok",
-        m: `${DUMMY_ALARM_LABELS[alarmKey]} acknowledged (demo)`,
+        m: `${ackLabel} acknowledged (demo)`,
     });
 
     updateAlarmSidebar();
@@ -449,6 +541,17 @@ function renderRoomAlarmSection(r) {
             rows.push({ key: "right_motor", t: "RIGHT MOTOR FAIL", sub: r.nm });
     } else if (r.alarm_motor) {
         rows.push({ key: "motor", t: "MOTOR FAIL", sub: r.nm });
+    }
+    if (useDummyDashboard()) {
+        (r.cameras || defaultRoomCameras()).forEach((cam) => {
+            if (!cam.enabled || !isCvHumanDetected(r, cam.slot)) return;
+            if (dummyAlarmAcks.get(r.id)?.has(`human_${cam.slot}`)) return;
+            rows.push({
+                key: `human_${cam.slot}`,
+                t: `HUMAN — ${cam.name || `Kamera ${cam.slot}`}`,
+                sub: "CV demo detection",
+            });
+        });
     }
     if (!rows.length)
         return `<div class="section-label" style="margin-top:10px">Room alarms</div><div style="font-size:11px;color:#6b7280">No active alarms in this room.</div>`;
@@ -624,6 +727,9 @@ export function openRoomPanel(roomId, crId) {
     if (typeof window.__syncDemoRoofSelect === "function") {
         window.__syncDemoRoofSelect(roomId);
     }
+    if (typeof window.__syncDemoCvSelect === "function") {
+        window.__syncDemoCvSelect(roomId);
+    }
 
     const cont = document.getElementById(`rooms-${crId}`);
     const btn = document.getElementById(`exp-${crId}`);
@@ -792,12 +898,83 @@ function getSidebarPressureInAlerts() {
     return out;
 }
 
-/** Satu daftar sidebar: emergency, pressure in, lalu motor. */
+function cvDetectionKey(roomId, slot) {
+    return `${roomId}:${slot}`;
+}
+
+function cvDetectionKeyForRoom(room, slot) {
+    const id = useDummyDashboard() ? room?.id : room?.api_room_id;
+    return cvDetectionKey(id, slot);
+}
+
+function resolveRoomFromCvKey(roomKey) {
+    if (useDummyDashboard()) return findRoom(roomKey);
+    const room = findRoomByApiId(Number(roomKey));
+    return room || null;
+}
+
+function getCvHumanAlerts() {
+    if (!cvUiActive()) return [];
+    const out = [];
+    for (const [key, detected] of Object.entries(cvDetections)) {
+        if (!detected) continue;
+        const [roomKey, slot] = key.split(":");
+        const room = resolveRoomFromCvKey(roomKey);
+        if (useDummyDashboard() && room && dummyAlarmAcks.get(room.id)?.has(`human_${slot}`)) {
+            continue;
+        }
+        const uiRoomId = room?.id || "";
+        const crId = uiRoomId ? findCR(uiRoomId) : "";
+        const cam = room?.cameras?.find((c) => String(c.slot) === String(slot));
+        const camLabel = cam?.name || `Camera ${slot}`;
+        pushAlarm(
+            out,
+            "cr",
+            room?.nm || `Room ${roomKey}`,
+            `HUMAN — ${camLabel}`,
+            crId || "",
+            uiRoomId || "",
+        );
+    }
+    return out;
+}
+
+export function setDummyCvDetection(roomId, slot, detected) {
+    if (!useDummyDashboard() || !roomId) return;
+    const key = cvDetectionKey(roomId, slot);
+    const next = Boolean(detected);
+    if (Boolean(cvDetections[key]) === next) return;
+    cvDetections[key] = next;
+    if (!next) delete cvDetections[key];
+
+    const room = findRoom(roomId);
+    if (room) {
+        if (!Array.isArray(room.events)) room.events = [];
+        const cam = room.cameras?.find((c) => Number(c.slot) === Number(slot));
+        const camLabel = cam?.name || `Kamera ${slot}`;
+        room.events.unshift({
+            t: getNow(),
+            c: next ? "cr" : "ok",
+            m: next ? `HUMAN DETECTED — ${camLabel} (CV demo)` : `Human cleared — ${camLabel} (CV demo)`,
+        });
+    }
+
+    updateAlarmSidebar();
+    buildSidebarRooms();
+}
+
+function initDummyCvState() {
+    cvDetections = { [cvDetectionKey("cell1", 1)]: true };
+    updateAlarmSidebar();
+}
+
+/** Satu daftar sidebar: emergency, pressure in, motor, lalu CV human. */
 export function getSidebarCombinedAlerts() {
     return [
         ...getSidebarEmergencyAlerts(),
         ...getSidebarPressureInAlerts(),
         ...getSidebarAlarms(),
+        ...getCvHumanAlerts(),
     ];
 }
 
@@ -827,14 +1004,18 @@ export function updateAlarmSidebar() {
         list.innerHTML = `<div class="al-empty-row"><i class="ti ti-circle-check"></i>No active alarms</div>`;
     } else {
         list.innerHTML = combined
-            .map(
-                (a) => `
-      <div class="al-row" onclick="openRoomPanel('${a.roomId}','${a.crId}')">
+            .map((a) => {
+                const click =
+                    a.roomId && a.crId
+                        ? ` onclick="openRoomPanel('${a.roomId}','${a.crId}')"`
+                        : "";
+                return `
+      <div class="al-row"${click}>
         <div class="al-bar ${a.lv}"></div>
         <div class="al-txt"><div class="al-name">${a.nm}</div><div class="al-sub al-sub--type">${a.sub}</div></div>
         <div class="al-time">${a.time}</div>
-      </div>`,
-            )
+      </div>`;
+            })
             .join("");
     }
 
@@ -1054,6 +1235,70 @@ export function initLogoFallback() {
 
 export function initOptionalTabs() {}
 
+function parseCvAlarmPayload(data) {
+    const next = {};
+    const rooms = data?.rooms;
+    if (!rooms || typeof rooms !== "object") {
+        if (data?.person_detected) {
+            next[cvDetectionKey(1, 1)] = true;
+        }
+        return next;
+    }
+    for (const [roomId, slots] of Object.entries(rooms)) {
+        if (!slots || typeof slots !== "object") continue;
+        for (const [slot, detected] of Object.entries(slots)) {
+            next[cvDetectionKey(roomId, slot)] = Boolean(detected);
+        }
+    }
+    return next;
+}
+
+function cvDetectionsChanged(prev, next) {
+    const keys = new Set([...Object.keys(prev), ...Object.keys(next)]);
+    for (const k of keys) {
+        if (Boolean(prev[k]) !== Boolean(next[k])) return true;
+    }
+    return false;
+}
+
+async function pollCvAlarmStatus() {
+    if (useDummyDashboard()) return;
+    if (!cvEnabled()) {
+        if (Object.keys(cvDetections).length) {
+            cvDetections = {};
+            updateAlarmSidebar();
+        }
+        return;
+    }
+    const base = cvBaseUrl();
+    if (!base) return;
+    try {
+        const res = await fetch(`${base}/alarm_status`);
+        if (!res.ok) return;
+        const data = await res.json();
+        const next = parseCvAlarmPayload(data);
+        if (cvDetectionsChanged(cvDetections, next)) {
+            cvDetections = next;
+            updateAlarmSidebar();
+        }
+    } catch (err) {
+        console.warn("[CV] alarm_status:", err?.message || err);
+    }
+}
+
+export function initCvMonitoring() {
+    if (cvPollTimer) clearInterval(cvPollTimer);
+    cvPollTimer = null;
+    cvDetections = {};
+    if (useDummyDashboard()) {
+        initDummyCvState();
+        return;
+    }
+    if (!cvEnabled()) return;
+    pollCvAlarmStatus();
+    cvPollTimer = setInterval(pollCvAlarmStatus, 1000);
+}
+
 export function registerGlobals() {
     window.toggleSidebar = toggleSidebar;
     window.closeSidebar = closeSidebar;
@@ -1065,64 +1310,3 @@ export function registerGlobals() {
     window.toggleCameraWide = toggleCameraWide;
     window.ackDummyRoomAlarm = ackDummyRoomAlarm;
 }
-
-/* =====================================
-YOLO HUMAN DETECTION ALARM
-===================================== */
-
-async function checkHumanDetection() {
-
-    try {
-
-        const response = await fetch(
-            "http://192.168.1.100:5000/alarm_status"
-        );
-
-        const data = await response.json();
-
-        const alarmCount =
-            document.getElementById("al-count");
-
-        const alarmList =
-            document.getElementById("al-list");
-
-        if (!alarmCount || !alarmList) return;
-
-        if (data.person_detected) {
-
-            alarmCount.textContent = "1";
-
-            alarmList.innerHTML = `
-                <div class="human-alarm">
-                    🔴 Human detected on Camera 1
-                </div>
-            `;
-
-        } else {
-
-            alarmCount.textContent = "0";
-
-            alarmList.innerHTML = `
-                <div class="al-empty-msg">
-                    No active alarms
-                </div>
-            `;
-        }
-
-    } catch (error) {
-
-        console.error(
-            "Alarm API Error:",
-            error
-        );
-    }
-}
-
-/* Start Monitoring */
-checkHumanDetection();
-
-/* Check every 1 second */
-setInterval(
-    checkHumanDetection,
-    1000
-);

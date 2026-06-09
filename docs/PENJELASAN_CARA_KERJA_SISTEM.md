@@ -26,7 +26,12 @@ flowchart LR
     POL[poller.py]
     CLI[client.py Modbus TCP]
   end
+  subgraph cv [camera]
+    FL[camera_stream.py]
+    YOLO[yolo_detector.py]
+  end
   PLC[PLC Modbus TCP]
+  RTSP[RTSP cameras]
 
   UI --> Web
   UI --> API
@@ -40,11 +45,17 @@ flowchart LR
   CLI --> PLC
   POL -->|POST webhook JSON| API
   FA -->|GET bridge-devices| API
+  FL -->|GET bridge-cameras| API
+  FL --> RTSP
+  FL --> YOLO
+  UI -->|stream / alarm_status| FL
   API --> DB
 ```
 
-- **Satu sumber kebenaran untuk parameter koneksi PLC di aplikasi web** adalah tabel **`plc_devices`** (diubah lewat halaman Settings).
-- **Python** mendapatkan salinan parameter itu saat startup lewat **`GET /api/plc/bridge-devices`** jika `LARAVEL_BRIDGE_DEVICES_URL` diisi; jika tidak, memakai **`python-modbus/config.py`** dan env `PLC_xx_IP`, `PLC_DEFAULT_UNIT_ID`, dll.
+- **Parameter PLC** disimpan di tabel **`plc_devices`** (Settings → PLC configuration).
+- **Parameter kamera RTSP** disimpan di **`room_cameras`** — 2 slot per ruang (Settings → Camera configuration).
+- **python-modbus** memuat PLC enabled lewat **`GET /api/plc/bridge-devices`**; fallback `config.py`.
+- **camera/** memuat RTSP enabled lewat **`GET /api/cv/bridge-cameras`** (token sama dengan `PLC_BRIDGE_TOKEN`).
 
 ---
 
@@ -58,8 +69,8 @@ flowchart LR
 
 **File terkait (web):**
 
-- `routes/web.php` — rute `login`, `logout`, `/`, `/settings/plc`.
-- `app/Http/Controllers/Web/AuthController.php` — proses login/logout.
+- `routes/web.php` — rute `login`, `logout`, `/`, `/settings/plc`, `/settings/cameras`.
+- `app/Http/Controllers/Web/Guest/AuthController.php` — proses login/logout web.
 
 ### 2.2 Dashboard (tampilan utama)
 
@@ -74,26 +85,39 @@ flowchart LR
 
 **File terkait (frontend):**
 
-- `resources/views/dashboard.blade.php` — kerangka HTML dashboard.
-- `resources/js/dashboard/main.js` — logika tab, pemilihan ruang, **`bindPlcEchoForRoom`**, integrasi data.
+- `resources/views/shared/dashboard.blade.php` — kerangka HTML dashboard.
+- `resources/js/dashboard/main.js` — tab, ruang, kamera/CV, **`bindPlcEchoForRoom`**, alarm gabungan.
+- `resources/js/dashboard/demoCvControls.js` / `demoRoofControls.js` — panel demo (dummy mode).
 - `resources/js/dashboard/init.js` — inisialisasi (termasuk Three.js / peta).
 - `resources/js/services/dashboardData.js` — **`getDashboardData()`**, **`PlcAPI.getRoomData`**.
 - `resources/js/services/authService.js` — token / pemanggilan API.
 - `resources/css/dashboard.css` — gaya termasuk halaman Settings.
 
-### 2.3 Settings — koneksi PLC
+### 2.3 Settings — PLC dan kamera
 
-1. Dari header/sidebar, pengguna membuka **`/settings/plc`** (hanya pengguna terautentikasi).
-2. Halaman menampilkan kartu per **PLC device** (grouped pits/cells): IP, port, **unit ID (slave)**, enabled, status, nama device yang selaras dengan nama ruang uji.
-3. Menyimpan perubahan mengirim **HTTP PUT** ke Laravel (`settings.plc.update`) untuk device yang dipilih; server memvalidasi dan memperbarui baris **`plc_devices`**.
+**PLC (`/settings/plc`):**
 
-**Implikasi operasional:** nilai **unit_id** di sini harus sama dengan **Unit ID** di PLC fisik. Setelah disimpan, bridge Python yang memakai **`LARAVEL_BRIDGE_DEVICES_URL`** akan membaca nilai baru **pada startup berikutnya** (restart uvicorn agar map device ter-refresh).
+1. Kartu per device: IP, port, unit ID, enable polling.
+2. **PUT** ke Laravel → tabel **`plc_devices`**.
+3. python-modbus refresh map ~15 detik jika `LARAVEL_BRIDGE_DEVICES_URL` diisi.
+
+**Kamera (`/settings/cameras`):**
+
+1. Dua slot RTSP per ruang uji: host, port, path, user/password, enable stream.
+2. **PUT** per slot → tabel **`room_cameras`**.
+3. Service `camera/` refresh ~15 detik lewat `LARAVEL_BRIDGE_CAMERAS_URL`.
 
 **File terkait:**
 
-- `app/Http/Controllers/Web/PlcConnectionController.php`
-- `resources/views/settings/plc-connection.blade.php`
-- `resources/views/settings/partials/plc-device-card.blade.php`
+- `app/Http/Controllers/Web/Operator/PlcConnectionController.php`
+- `app/Http/Controllers/Web/Operator/CameraConnectionController.php`
+- `resources/views/operator/plc-connection.blade.php`
+- `resources/views/operator/camera-connection.blade.php`
+
+### 2.3b Kamera di dashboard & mode dummy
+
+- **Live:** `VITE_CV_ENABLED=true` → stream `{VITE_CV_BASE_URL}/stream/{room_id}/{slot}`; alarm human di sidebar.
+- **Dummy:** `VITE_DASHBOARD_USE_DUMMY=true` → feed DEMO, alarm contoh (Test Cell 1), panel **Demo CV** (admin).
 
 ### 2.4 Peran operator vs admin
 
@@ -119,26 +143,26 @@ flowchart LR
 
 1. **`python-modbus/main.py`** memuat **`.env`** (path eksplisit di folder `python-modbus`).
 2. Jika **`ENABLE_POLLING`** aktif, pada **lifespan** FastAPI:
-   - **`load_plc_devices_sync()`** (`modbus/device_loader.py`):
-     - Jika **`LARAVEL_BRIDGE_DEVICES_URL`** ada: **HTTP GET** ke Laravel → JSON `{ ok, devices: { "1": { ip, port, unit_id, name }, ... } }` hanya untuk **`is_enabled = true`**.
-     - Jika gagal atau URL kosong: fallback ke **`config.PLC_DEVICES`**.
-   - **`set_plc_devices(...)`** (`modbus/poller.py`) mengisi map in-memory **`_plc_devices`**.
-   - **`start_polling()`** memulai loop async.
+    - **`load_plc_devices_sync()`** (`modbus/device_loader.py`):
+        - Jika **`LARAVEL_BRIDGE_DEVICES_URL`** ada: **HTTP GET** ke Laravel → JSON `{ ok, devices: { "1": { ip, port, unit_id, name }, ... } }` hanya untuk **`is_enabled = true`**.
+        - Jika gagal atau URL kosong: fallback ke **`config.PLC_DEVICES`**.
+    - **`set_plc_devices(...)`** (`modbus/poller.py`) mengisi map in-memory **`_plc_devices`**.
+    - **`start_polling()`** memulai loop async.
 
 ### 3.3 Polling Modbus
 
 1. **`poll_all()`** memanggil **`poll_single(room_id)`** untuk setiap kunci di **`_plc_devices`** secara paralel.
 2. **`read_plc_registers`** (`modbus/client.py`):
-   - Membuka **AsyncModbusTcpClient** ke **`plc_config["ip"]`** dan **`plc_config["port"]`**.
-   - Membaca **holding registers** mulai **PDU address `REGISTER_START` (0)** sebanyak **`REGISTER_COUNT` (12)** dengan **slave/unit = `plc_config["unit_id"]`**.
-   - Memetakan word ke alamat logis **40001–40012** lewat **`REGISTER_MAP`** dan **`address_to_index`** di **`modbus/register_map.py`**.
+    - Membuka **AsyncModbusTcpClient** ke **`plc_config["ip"]`** dan **`plc_config["port"]`**.
+    - Membaca **holding registers** mulai **PDU address `REGISTER_START` (0)** sebanyak **`REGISTER_COUNT` (12)** dengan **slave/unit = `plc_config["unit_id"]`**.
+    - Memetakan word ke alamat logis **40001–40012** lewat **`REGISTER_MAP`** dan **`address_to_index`** di **`modbus/register_map.py`**.
 3. Hasil per ruang: status `success` / `timeout` / `error`, plus struktur **`data`** berisi nilai ter-decode per register.
 
 ### 3.4 Deteksi perubahan dan webhook
 
 1. **`detect_changes`** (`poller.py`) membandingkan snapshot register dengan state sebelumnya per **`room_id`**.
 2. **`send_to_laravel`** mengirim **POST** ke **`LARAVEL_WEBHOOK`** (env `LARAVEL_WEBHOOK_URL`) dengan JSON:
-   - `room_id`, `polled_at`, `status`, `snapshot`, `changes`, `error`.
+    - `room_id`, `polled_at`, `status`, `snapshot`, `changes`, `error`.
 3. Jika **`PLC_WEBHOOK_SECRET`** di Python diisi, header **`X-PLC-Secret`** ikut dikirim agar cocok dengan validasi di Laravel.
 
 ### 3.5 Pemrosesan webhook di Laravel
@@ -158,13 +182,14 @@ Urutan logika utama:
 
 ### 3.6 API yang dibaca frontend / integrasi lain
 
-| Metode | Path | Fungsi |
-|--------|------|--------|
-| GET | `/api/dashboard` | Payload dashboard untuk user yang login (`DashboardController` + **`PlcDataService`**). |
-| GET | `/api/plc/{room_id}/data` | Snapshot cache terakhir untuk satu ruang. |
-| GET | `/api/plc/{room_id}/logs` | Riwayat perubahan register. |
-| GET | `/api/plc/bridge-devices?token=...` | Daftar device untuk Python (token **`PLC_BRIDGE_TOKEN`**). |
-| POST | `/api/plc/webhook` | Masukan dari Python. |
+| Metode | Path                                | Fungsi                                                                                  |
+| ------ | ----------------------------------- | --------------------------------------------------------------------------------------- |
+| GET    | `/api/dashboard`                    | Payload dashboard untuk user yang login (`DashboardController` + **`PlcDataService`**). |
+| GET    | `/api/plc/{room_id}/data`           | Snapshot cache terakhir untuk satu ruang.                                               |
+| GET    | `/api/plc/{room_id}/logs`           | Riwayat perubahan register.                                                             |
+| GET    | `/api/plc/bridge-devices?token=...` | Daftar PLC untuk python-modbus.                                                         |
+| GET    | `/api/cv/bridge-cameras?token=...`  | Daftar RTSP enabled untuk `camera/`.                                                    |
+| POST   | `/api/plc/webhook`                  | Masukan polling dari python-modbus.                                                     |
 
 **Autentikasi:** sebagian besar rute API di **`routes/api.php`** memakai **`auth:sanctum`**; webhook dan bridge memakai **secret/token** terpisah, bukan session browser.
 
@@ -188,24 +213,27 @@ Jika urutan atau tipe di PLC berbeda, **sesuaikan PLC atau file map** agar konsi
 
 ## 5. File dan direktori rujukan cepat
 
-| Area | Lokasi |
-|------|--------|
-| Rute web | `routes/web.php` |
-| Rute API | `routes/api.php` |
-| Webhook & bridge | `app/Http/Controllers/Api/PlcController.php` |
-| Dashboard API | `app/Http/Controllers/Api/DashboardController.php` |
-| Agregasi dashboard | `app/Services/PlcDataService.php` |
-| Event realtime | `app/Events/PlcRoomUpdated.php` |
-| Model PLC | `app/Models/PlcDevice.php` |
-| Seed data | `database/seeders/DatabaseSeeder.php` |
-| Entry FastAPI | `python-modbus/main.py` |
-| Load device dari Laravel | `python-modbus/modbus/device_loader.py` |
-| Loop polling | `python-modbus/modbus/poller.py` |
-| Client Modbus | `python-modbus/modbus/client.py` |
-| Map register | `python-modbus/modbus/register_map.py` |
-| Default PLC statis | `python-modbus/config.py` |
-| Dashboard JS | `resources/js/dashboard/main.js` |
-| Echo / Pusher | `resources/js/bootstrap.js` |
+| Area                     | Lokasi                                             |
+| ------------------------ | -------------------------------------------------- |
+| Rute web                 | `routes/web.php`                                   |
+| Rute API                 | `routes/api.php`                                   |
+| Webhook & bridge         | `app/Http/Controllers/Api/PlcController.php`       |
+| Dashboard API            | `app/Http/Controllers/Api/DashboardController.php` |
+| Agregasi dashboard       | `app/Services/PlcDataService.php`                  |
+| Event realtime           | `app/Events/PlcRoomUpdated.php`                    |
+| Model PLC                | `app/Models/PlcDevice.php`                         |
+| Seed data                | `database/seeders/DatabaseSeeder.php`              |
+| Entry FastAPI            | `python-modbus/main.py`                            |
+| Load device dari Laravel | `python-modbus/modbus/device_loader.py`            |
+| Loop polling             | `python-modbus/modbus/poller.py`                   |
+| Client Modbus            | `python-modbus/modbus/client.py`                   |
+| Map register             | `python-modbus/modbus/register_map.py`             |
+| Default PLC statis       | `python-modbus/config.py`                          |
+| CV Flask                 | `camera/camera_stream.py`                          |
+| CV loader                | `camera/camera_loader.py`                          |
+| Model kamera             | `app/Models/RoomCamera.php`                        |
+| Dashboard JS             | `resources/js/dashboard/main.js`                   |
+| Echo / Pusher            | `resources/js/bootstrap.js`                        |
 
 ---
 
@@ -219,4 +247,4 @@ Jika urutan atau tipe di PLC berbeda, **sesuaikan PLC atau file map** agar konsi
 
 ---
 
-Untuk langkah instalasi dan perintah terminal, lihat **`docs/PANDUAN_MENJALANKAN_SISTEM.md`**.
+Untuk gambaran produk: **`docs/GAMBARAN_SISTEM.md`**. Untuk instalasi: **`docs/PANDUAN_MENJALANKAN_SISTEM.md`**.

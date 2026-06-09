@@ -8,6 +8,7 @@ use App\Models\User;
 use App\Models\ControlRoom;
 use App\Models\TestingRoom;
 use App\Models\PlcDevice;
+use App\Models\RoomCamera;
 
 class DatabaseSeeder extends Seeder
 {
@@ -49,6 +50,20 @@ class DatabaseSeeder extends Seeder
                 'is_enabled' => true,
                 'status' => 'offline',
             ]);
+
+            foreach ([1 => 'Camera 1', 2 => 'Camera 2'] as $slot => $camName) {
+                RoomCamera::create([
+                    'testing_room_id' => $testingRoom->id,
+                    'slot' => $slot,
+                    'name' => $camName,
+                    'rtsp_host' => '192.168.1.64',
+                    'rtsp_port' => 554,
+                    'rtsp_path' => '/Streaming/Channels/102',
+                    'rtsp_username' => 'admin',
+                    'rtsp_password' => 'changeme',
+                    'is_enabled' => false,
+                ]);
+            }
         }
 
         // ── Users ──────────────────────────────────────────────────────────────

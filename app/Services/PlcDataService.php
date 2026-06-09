@@ -19,7 +19,7 @@ class PlcDataService
         if (! $user->isAdmin() && $user->testing_room_id) {
             $tr = TestingRoom::query()
                 ->where('is_active', true)
-                ->with(['controlRoom', 'plcDevices'])
+                ->with(['controlRoom', 'plcDevices', 'roomCameras'])
                 ->find($user->testing_room_id);
             if (! $tr || ! $tr->controlRoom) {
                 return ['controlRooms' => [], 'utilities' => $this->defaultUtilities()];
@@ -46,7 +46,7 @@ class PlcDataService
         $controlRooms = [];
         foreach ($crQuery->with([
             'testingRooms' => function ($q) {
-                $q->where('is_active', true)->orderBy('code')->with('plcDevices');
+                $q->where('is_active', true)->orderBy('code')->with(['plcDevices', 'roomCameras']);
             },
         ])->get() as $cr) {
             $key = $this->controlRoomKey($cr->code);
@@ -184,6 +184,16 @@ class PlcDataService
 
         $base['plc_link_status'] = $device?->status ?? 'offline';
         $base['plc_last_seen_at'] = $device?->last_seen_at?->toIso8601String();
+
+        $base['cameras'] = $tr->roomCameras
+            ->sortBy('slot')
+            ->map(fn ($cam) => [
+                'slot' => (int) $cam->slot,
+                'name' => $cam->name,
+                'enabled' => (bool) $cam->is_enabled,
+            ])
+            ->values()
+            ->all();
 
         return $base;
     }

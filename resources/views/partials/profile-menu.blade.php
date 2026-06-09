@@ -25,6 +25,10 @@
         <i class="ti ti-plug-connected" aria-hidden="true"></i>
         <span><strong>PLC configuration</strong><small>IP, port, devices</small></span>
       </a>
+      <a href="{{ route('settings.cameras') }}" class="dash-profile-dd-item" role="menuitem">
+        <i class="ti ti-video" aria-hidden="true"></i>
+        <span><strong>Camera configuration</strong><small>RTSP per test room</small></span>
+      </a>
       <a href="{{ route('admin.activity-logs.index') }}" class="dash-profile-dd-item" role="menuitem">
         <i class="ti ti-history" aria-hidden="true"></i>
         <span><strong>PLC register log</strong><small>Value change history</small></span>
@@ -34,6 +38,10 @@
       <a href="{{ route('settings.plc') }}" class="dash-profile-dd-item" role="menuitem">
         <i class="ti ti-plug-connected" aria-hidden="true"></i>
         <span><strong>PLC configuration</strong><small>IP, port, devices</small></span>
+      </a>
+      <a href="{{ route('settings.cameras') }}" class="dash-profile-dd-item" role="menuitem">
+        <i class="ti ti-video" aria-hidden="true"></i>
+        <span><strong>Camera configuration</strong><small>RTSP per test room</small></span>
       </a>
     @endif
     <a href="{{ route('account.password.edit') }}" class="dash-profile-dd-item" role="menuitem">

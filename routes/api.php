@@ -4,6 +4,7 @@ use App\Http\Controllers\Api\ActivityLogController;
 use App\Http\Controllers\Api\Admin\UserController as AdminUserController;
 use App\Http\Controllers\Api\AlarmController;
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\CvController;
 use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\PlcController;
 use App\Http\Controllers\Api\RoomController;
@@ -54,4 +55,7 @@ Route::post('/plc/webhook', [PlcController::class, 'webhook'])
     ->middleware('throttle:120,1');
 
 Route::get('/plc/bridge-devices', [PlcController::class, 'bridgeDevices'])
+    ->middleware('throttle:60,1');
+
+Route::get('/cv/bridge-cameras', [CvController::class, 'bridgeCameras'])
     ->middleware('throttle:60,1');

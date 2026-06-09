@@ -7,6 +7,35 @@ function useDummyDashboard() {
     return import.meta.env.VITE_DASHBOARD_USE_DUMMY === 'true';
 }
 
+const DUMMY_ROOM_API_IDS = {
+    pit1: 1,
+    pit2: 2,
+    pit3: 3,
+    pit4: 4,
+    pit5: 5,
+    pit6: 6,
+    cell1: 7,
+    cell2: 8,
+    cell3: 9,
+    cell4: 10,
+    cell5: 11,
+};
+
+const DUMMY_ROOM_CAMERAS = [
+    { slot: 1, name: 'Kamera 1', enabled: true },
+    { slot: 2, name: 'Kamera 2', enabled: true },
+];
+
+function enrichDummyRooms(controlRooms) {
+    Object.values(controlRooms).forEach((cr) => {
+        (cr.rooms || []).forEach((room) => {
+            if (!room.plc_link_status) room.plc_link_status = 'online';
+            room.api_room_id = DUMMY_ROOM_API_IDS[room.id] ?? 0;
+            room.cameras = structuredClone(DUMMY_ROOM_CAMERAS);
+        });
+    });
+}
+
 /** Tanpa dummy: tidak ada data palsu saat API gagal / belum login. */
 function emptyDashboardPayload() {
     return {
@@ -46,11 +75,7 @@ export function normalizeDashboardPayload(raw) {
 export async function getDashboardData() {
     if (useDummyDashboard()) {
         const controlRooms = clone(DUMMY_CONTROL_ROOMS);
-        Object.values(controlRooms).forEach((cr) => {
-            (cr.rooms || []).forEach((room) => {
-                if (!room.plc_link_status) room.plc_link_status = 'online';
-            });
-        });
+        enrichDummyRooms(controlRooms);
         return {
             controlRooms,
             utilities: clone(DUMMY_UTILITIES),

@@ -105,12 +105,7 @@
     </div>
 
     <aside class="rpanel dash-rpanel" id="rpanel">
-      <div class="camera-view" id="camera-view">
-    <img
-        id="camera"
-        src="http://172.20.10.2:5000/camera1"
-        alt="Camera Stream">
-</div>
+      <div class="camera-view" id="camera-view" hidden aria-hidden="true"></div>
       <div class="rp-accent" id="rp-accent"></div>
       <div class="rp-hdr rp-hdr--detail">
         <div class="rp-hdr-row rp-hdr-row--detail">

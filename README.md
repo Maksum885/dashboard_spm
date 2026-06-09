@@ -1,83 +1,131 @@
-# Sistem / dashboard monitoring pada testing bay
+# SPM SCADA
 
-Repositori ini berisi **sistem dan dashboard monitoring** untuk area **testing bay**: pengawas melihat kondisi tiap **test pit** dan **test cell** dari browser, tanpa harus berdiri di depan panel PLC.
+Web-based SCADA dashboard for **SPM testing bay** — monitor test pits and test cells, PLC telemetry, and optional CCTV with human detection.
 
-Aplikasi web dibangun dengan **Laravel** (backend + API) dan **JavaScript/Vite** (tampilan dashboard). Data dari PLC di lapangan masuk ke server melalui **jembatan polling** (service Python di folder `python-modbus/`) yang mengirim hasil baca ke aplikasi.
+## Features
 
----
+- **3D facility map** with per-room detail panels
+- **PLC integration** via Modbus TCP (`python-modbus` bridge → Laravel webhook)
+- **Per-room RTSP cameras** (2 slots) with **YOLOv8** person detection (`camera/` Flask service)
+- **Role-based access** — admin, operator, viewer
+- **Realtime updates** via Laravel Echo / Pusher (optional)
+- **Dummy mode** for UI demos without live PLC or CV (`VITE_DASHBOARD_USE_DUMMY`)
 
-## Apa yang dilakukan sistem ini
+## Tech stack
 
-- Menyatukan tampilan **beberapa control room** dan **ruang uji** (pit/cell) dalam satu halaman utama.
-- Menampilkan **status koneksi** per ruang terhadap perangkat PLC (online/offline) agar operator tahu apakah angka di layar masih hidup dari lapangan.
-- Memuat **tekanan**, **posisi atap**, **mode panel**, **status uji**, **pintu**, dan **kondisi darurat** sesuai data yang diterima dari PLC (detail register dan pemetaannya ada di dokumentasi teknis, bukan di README ini).
-- Menampilkan **alarm aktif** (termasuk darurat dan gangguan motor) di sidebar agar cepat terlihat.
-- Menyediakan **log peristiwa** ringkas per ruang di panel detail.
-- Mendukung **pembaruan data secara berkala** dari server dan, bila dikonfigurasi, **pembaruan hampir realtime** lewat saluran broadcast ke browser.
-- Mode **data dummy** (`VITE_DASHBOARD_USE_DUMMY=true`): untuk **admin**, panel **Demo roof** di peta 3D (Close / Open per ruang, tanpa PLC).
+| Layer      | Stack                                         |
+| ---------- | --------------------------------------------- |
+| Backend    | Laravel 12, PHP 8.2+, Sanctum                 |
+| Frontend   | Vite, JavaScript, Three.js, Tailwind          |
+| Database   | SQL Server (or SQLite/MySQL for dev)          |
+| PLC bridge | Python 3.10+, FastAPI, pymodbus               |
+| CV service | Python 3.10+, Flask, OpenCV, Ultralytics YOLO |
 
----
+## Requirements
 
-## Fitur utama (sisi pengguna)
+- PHP 8.2+, Composer, Node.js (LTS), npm
+- Python 3.10+ (for `python-modbus/` and `camera/`)
+- SQL Server or compatible DB (see `.env.example`)
+- FFmpeg (recommended for RTSP via OpenCV)
 
-| Area | Fitur |
-|------|--------|
-| **Dashboard** | Peta fasilitas **3D**; pemilihan ruang; ringkasan status; panel kanan dengan ringkasan tekanan, atap, status operasi, dan alarm ruangan |
-| **Navigasi** | **Admin**: hierarki control room lalu daftar ruang. **Operator / viewer**: daftar ruang uji saja (diurutkan nama), sesuai hak akses |
-| **Pengaturan PLC** | Halaman untuk mengatur koneksi per perangkat (alamat, port, unit, aktif/nonaktif) per ruang uji — nilai disimpan di server |
-| **Akun** | Login/logout; **ganti kata sandi** sendiri dari menu profil; **admin** dapat mengelola operator dan melihat log aktivitas lewat area admin |
-| **API** | Endpoint terautentikasi untuk dashboard, data ruang, alarm, dan log — dipakai oleh antarmuka web dan dapat dipakai integrasi lain (token **Laravel Sanctum**) |
+## Quick start
 
----
+```bash
+# 1. Environment
+cp .env.example .env
+php artisan key:generate
 
-## Peran pengguna
+# 2. Dependencies
+composer install
+npm install
 
-- **Admin** — melihat seluruh area, mengelola akun operator, serta fitur administrasi lain di panel admin.
-- **Operator** — memantau dan berinteraksi dengan ruang yang ditugaskan (termasuk pengaturan PLC untuk ruang itu, sesuai aturan di aplikasi); dapat mengakui/menyelesaikan alarm lewat API bila tersedia.
-- **Viewer** — memantau ruang yang ditugaskan tanpa peran mengubah konfigurasi seperti operator.
+# 3. Database
+php artisan migrate
+php artisan db:seed
 
-Hak akses per ruang diatur di data pengguna (control room / ruang uji), bukan di README.
+# 4. Run (dev — Laravel + Vite + queue)
+composer run dev
+```
 
----
+Open `http://127.0.0.1:8000` and sign in:
 
-## Isi repositori (gambaran)
+| Role              | Email                            | Password      |
+| ----------------- | -------------------------------- | ------------- |
+| Admin             | `admin@spm-scada.com`            | `admin123`    |
+| Operator (room N) | `operator.room{N}@spm-scada.com` | `operator123` |
 
-- **Kode aplikasi web & API** — folder `app/`, `routes/`, `resources/`, konfigurasi Laravel standar.
-- **`python-modbus/`** — service polling Modbus ke PLC dan pengiriman hasil ke aplikasi Laravel.
-- **`docs/`** — panduan menjalankan sistem dari nol dan penjelasan alur data (cocok untuk tim operasional dan pengembang).
+Change passwords in production.
 
----
+### Optional services
 
-## Menyiapkan lingkungan pengembangan
+**PLC bridge** (`python-modbus/`):
 
-Ringkasan; langkah lengkap dan penyesuaian lingkungan ada di **`docs/PANDUAN_MENJALANKAN_SISTEM.md`**.
+```bash
+cd python-modbus
+python -m venv .venv
+# activate venv, then:
+pip install -r requirements.txt
+uvicorn main:app --host 0.0.0.0 --port 8001
+```
 
-1. Salin `.env` dari `.env.example`, atur database, jalankan `php artisan key:generate`, `php artisan migrate`, lalu **`php artisan db:seed`** bila membutuhkan data demo (control room, ruang uji, akun).
-2. Pasang dependensi: `composer install` dan `npm install`.
-3. Untuk satu perintah awal bawaan proyek: **`composer run setup`** (lihat skrip di `composer.json`).
-4. Saat pengembangan aktif: **`composer run dev`** menjalankan server Laravel, Vite, dan proses pendamping yang sudah didefinisikan di `composer.json`.
+**CV / cameras** (`camera/`):
 
----
+```bash
+cd camera
+cp .env.example .env   # set LARAVEL_BRIDGE_CAMERAS_URL + token
+pip install -r requirements.txt
+python camera_stream.py
+```
 
-## Dokumentasi teknis
+Enable cameras in **Settings → Camera configuration** and set `VITE_CV_ENABLED=true` in Laravel `.env`, then restart Vite.
 
-| File | Isi |
-|------|-----|
-| `docs/SISTEM_CARA_KERJA_DAN_INDEKS_FILE.md` | **Cara kerja internal** (login web/API, logout, dashboard, PLC), **diagram** (alur, ERD), **indeks semua file `app/`** dan modul utama untuk cross-check saat update |
-| `docs/PANDUAN_MENJALANKAN_SISTEM.md` | Urutan instalasi, database, frontend, dan bridge hingga siap dipakai |
-| `docs/PENJELASAN_CARA_KERJA_SISTEM.md` | Alur dari klik pengguna sampai data PLC, webhook, cache, dan broadcast |
+**UI-only demo** (no PLC/CV):
 
----
+```env
+VITE_DASHBOARD_USE_DUMMY=true
+```
 
-## Uji & gaya kode PHP
+## Key environment variables
+
+See [`.env.example`](.env.example) for full comments.
+
+| Variable                   | Purpose                                                           |
+| -------------------------- | ----------------------------------------------------------------- |
+| `PLC_BRIDGE_TOKEN`         | Token for Python bridge APIs (`bridge-devices`, `bridge-cameras`) |
+| `PLC_WEBHOOK_SECRET`       | Header `X-PLC-Secret` on PLC webhook                              |
+| `VITE_CV_ENABLED`          | Enable live camera streams in dashboard                           |
+| `VITE_CV_BASE_URL`         | Flask CV service URL (e.g. `http://127.0.0.1:5000`)               |
+| `VITE_DASHBOARD_USE_DUMMY` | Static demo data + Demo roof / Demo CV panels                     |
+
+## Project structure
+
+```
+spm-scada/
+├── app/                 # Laravel application
+├── resources/js/        # Dashboard (Vite)
+├── python-modbus/       # Modbus polling → Laravel webhook
+├── camera/              # RTSP + YOLO Flask service
+├── database/            # Migrations & seeders
+└── docs/                # Detailed documentation (Indonesian)
+```
+
+## Documentation
+
+| Document                                                                               | Description                  |
+| -------------------------------------------------------------------------------------- | ---------------------------- |
+| [docs/GAMBARAN_SISTEM.md](docs/GAMBARAN_SISTEM.md)                                     | System overview (Indonesian) |
+| [docs/PANDUAN_MENJALANKAN_SISTEM.md](docs/PANDUAN_MENJALANKAN_SISTEM.md)               | Setup & operations guide     |
+| [docs/SISTEM_CARA_KERJA_DAN_INDEKS_FILE.md](docs/SISTEM_CARA_KERJA_DAN_INDEKS_FILE.md) | Architecture & file index    |
+| [docs/PENJELASAN_CARA_KERJA_SISTEM.md](docs/PENJELASAN_CARA_KERJA_SISTEM.md)           | End-to-end data flows        |
+| [ROADMAP-SCADA.md](ROADMAP-SCADA.md)                                                   | Improvement roadmap          |
+
+## Testing & code style
 
 ```bash
 composer test
 vendor/bin/pint
 ```
 
----
+## License
 
-## Lisensi
-
-Kerangka aplikasi mengikuti lisensi **Laravel** ([MIT](https://opensource.org/licenses/MIT)). Lisensi produk lengkap mengikuti kebijakan pemilik repositori.
+The Laravel framework is [MIT licensed](https://opensource.org/licenses/MIT). Product licensing follows repository owner policy.

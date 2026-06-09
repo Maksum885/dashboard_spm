@@ -33,6 +33,11 @@ class TestingRoom extends Model
         return $this->hasMany(PlcDevice::class);
     }
 
+    public function roomCameras(): HasMany
+    {
+        return $this->hasMany(RoomCamera::class)->orderBy('slot');
+    }
+
     public function alarmLogs(): HasMany
     {
         return $this->hasMany(AlarmLog::class);

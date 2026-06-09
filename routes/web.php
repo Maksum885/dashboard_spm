@@ -5,6 +5,7 @@ use App\Http\Controllers\Web\Admin\ActivityLogController as AdminActivityLogCont
 use App\Http\Controllers\Web\Admin\OperatorController as AdminOperatorController;
 use App\Http\Controllers\Web\DashboardController;
 use App\Http\Controllers\Web\Guest\AuthController;
+use App\Http\Controllers\Web\Operator\CameraConnectionController;
 use App\Http\Controllers\Web\Operator\PlcConnectionController;
 use Illuminate\Support\Facades\Route;
 
@@ -22,6 +23,9 @@ Route::middleware('auth')->group(function () {
 
     Route::get('/settings/plc', [PlcConnectionController::class, 'index'])->name('settings.plc');
     Route::put('/settings/plc/{plc_device}', [PlcConnectionController::class, 'update'])->name('settings.plc.update');
+
+    Route::get('/settings/cameras', [CameraConnectionController::class, 'index'])->name('settings.cameras');
+    Route::put('/settings/cameras/{room_camera}', [CameraConnectionController::class, 'update'])->name('settings.cameras.update');
 
     Route::middleware('role:admin')->prefix('admin')->name('admin.')->group(function () {
         Route::get('/operators', [AdminOperatorController::class, 'index'])->name('operators.index');
