@@ -63,11 +63,6 @@
                     @method('PATCH')
                     <button type="submit" class="admin-btn admin-btn--sm admin-btn--ghost">{{ $u->is_active ? 'Deactivate' : 'Activate' }}</button>
                   </form>
-                  <form method="POST" action="{{ route('admin.operators.destroy', $u) }}" class="admin-inline-form" onsubmit="return confirm(@json('Permanently delete '.$u->name.'? API tokens will be revoked.'));">
-                    @csrf
-                    @method('DELETE')
-                    <button type="submit" class="admin-btn admin-btn--sm admin-btn--danger-ghost">Delete</button>
-                  </form>
                 @endif
               </div>
             </td>

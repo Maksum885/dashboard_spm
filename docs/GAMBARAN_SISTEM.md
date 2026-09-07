@@ -1,4 +1,4 @@
-# Gambaran sistem — SPM SCADA Testing Bay
+# Gambaran Sistem — Testing Bay Dashboard
 
 Dokumen ini menjelaskan **apa yang dilakukan sistem**, **fitur utama**, dan **peran pengguna** dalam bahasa yang mudah dipahami tim operasional maupun pengembang. Untuk instalasi teknis, lihat [`PANDUAN_MENJALANKAN_SISTEM.md`](PANDUAN_MENJALANKAN_SISTEM.md).
 
@@ -8,7 +8,7 @@ Dokumen ini menjelaskan **apa yang dilakukan sistem**, **fitur utama**, dan **pe
 
 Repositori ini berisi **sistem dan dashboard monitoring** untuk area **testing bay**: pengawas melihat kondisi tiap **test pit** dan **test cell** dari browser, tanpa harus berdiri di depan panel PLC.
 
-Aplikasi web dibangun dengan **Laravel** (backend + API) dan **JavaScript/Vite** (tampilan dashboard). Data dari PLC di lapangan masuk ke server melalui **jembatan polling** (`python-modbus/`) yang mengirim hasil baca Modbus ke aplikasi. **Kamera CCTV** (opsional) diproses oleh layanan **Computer Vision** (`camera/`) dengan deteksi manusia YOLOv8.
+Aplikasi web dibangun dengan **Laravel** (backend + API) dan **JavaScript/Vite** (tampilan dashboard). Data dari PLC di lapangan masuk ke server melalui **jembatan polling** (`python-modbus/`) yang mengirim hasil baca Modbus ke aplikasi. **Kamera CCTV** (opsional) diproses oleh **Jetson Nano** yang menjalankan layanan **Computer Vision** (`camera/`) dengan deteksi manusia YOLOv8.
 
 ---
 
@@ -18,7 +18,7 @@ Aplikasi web dibangun dengan **Laravel** (backend + API) dan **JavaScript/Vite**
 - Menampilkan **status koneksi PLC** per ruang (online/offline/error).
 - Memuat **tekanan**, **posisi atap**, **mode panel**, **status uji**, **pintu**, dan **kondisi darurat** dari register PLC.
 - Menampilkan **alarm aktif** (darurat, tekanan, motor, deteksi manusia CV) di sidebar.
-- **Dua kamera RTSP per ruang** — konfigurasi di Settings → Camera configuration; stream MJPEG + alarm human dari service Python.
+- **Dua kamera RTSP per ruang** — konfigurasi di Settings → Camera configuration; stream MJPEG + alarm human dari Jetson Nano.
 - **Log peristiwa** ringkas per ruang di panel detail.
 - Pembaruan data berkala dari API dan, bila dikonfigurasi, **realtime** lewat Pusher/Echo.
 - **Mode dummy** (`VITE_DASHBOARD_USE_DUMMY=true`): uji UI tanpa PLC/CV live — panel **Demo roof** dan **Demo CV** (admin).
@@ -40,13 +40,19 @@ Aplikasi web dibangun dengan **Laravel** (backend + API) dan **JavaScript/Vite**
 
 ## Computer Vision (CV)
 
-| Mode      | Kondisi                                        | Perilaku                                                                        |
-| --------- | ---------------------------------------------- | ------------------------------------------------------------------------------- |
-| **Live**  | `VITE_CV_ENABLED=true` + Flask `camera/` jalan | Stream `/stream/{room_id}/{slot}`, alarm dari `/alarm_status`                   |
-| **Dummy** | `VITE_DASHBOARD_USE_DUMMY=true`                | Feed demo di UI, alarm human contoh (Test Cell 1 / Kamera 1), panel **Demo CV** |
-| **Off**   | Keduanya false                                 | Kotak "CV disabled" di panel kamera                                             |
+Layanan CV berjalan di **Jetson Nano P3450** (JetPack 4.6) yang terhubung ke jaringan LAN yang sama dengan server dan PLC.
 
-Konfigurasi RTSP disimpan di tabel **`room_cameras`** (2 slot per `testing_room`). Python memuat daftar enabled lewat `GET /api/cv/bridge-cameras?token=` (token sama dengan `PLC_BRIDGE_TOKEN`).
+| Mode      | Kondisi                                                               | Perilaku                                                                         |
+| --------- | --------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| **Live**  | `VITE_CV_ENABLED=true` + Flask `camera/` jalan di Jetson (port 5001) | Stream `/stream/{room_id}/{slot}`, alarm dari `/alarm_status`                    |
+| **Dummy** | `VITE_DASHBOARD_USE_DUMMY=true`                                       | Feed demo di UI, alarm human contoh (Test Cell 1 / Kamera 1), panel **Demo CV** |
+| **Off**   | Keduanya false                                                        | Kotak "CV disabled" di panel kamera                                              |
+
+Konfigurasi RTSP disimpan di tabel **`room_cameras`** (2 slot per `testing_room`). Jetson memuat daftar enabled lewat `GET /api/cv/bridge-cameras?token=` (token sama dengan `PLC_BRIDGE_TOKEN`).
+
+### Skema hybrid: CV → PLC → Dashboard
+
+Selain jalur langsung `/alarm_status`, deteksi orang juga ditulis ke **Holding Register 10** PLC (`%MW9`, address 40010) via Modbus TCP FC6 (`plc_writer.py`, pymodbus 2.5.3). Register ini dibaca `python-modbus`, dikirim ke webhook Laravel, dan dicatat sebagai alarm `CV_PERSON_DETECTED` di `alarm_logs`.
 
 ---
 
@@ -60,12 +66,12 @@ Konfigurasi RTSP disimpan di tabel **`room_cameras`** (2 slot per `testing_room`
 
 ## Isi repositori (gambaran)
 
-| Folder                          | Fungsi                                     |
-| ------------------------------- | ------------------------------------------ |
-| `app/`, `routes/`, `resources/` | Aplikasi web Laravel + dashboard Vite      |
-| `python-modbus/`                | Polling Modbus TCP → webhook Laravel       |
-| `camera/`                       | Flask: RTSP multi-room, YOLO, MJPEG stream |
-| `docs/`                         | Panduan instalasi, arsitektur, indeks file |
+| Folder                          | Fungsi                                                         |
+| ------------------------------- | -------------------------------------------------------------- |
+| `app/`, `routes/`, `resources/` | Aplikasi web Laravel + dashboard Vite                          |
+| `python-modbus/`                | Polling Modbus TCP → webhook Laravel (jalan di server PC)      |
+| `camera/`                       | Flask: RTSP multi-room, YOLO, MJPEG stream (deploy ke Jetson) |
+| `docs/`                         | Panduan instalasi, arsitektur, indeks file                     |
 
 ---
 
@@ -74,8 +80,8 @@ Konfigurasi RTSP disimpan di tabel **`room_cameras`** (2 slot per `testing_room`
 1. Salin `.env` dari `.env.example`; `php artisan key:generate`; `php artisan migrate`; `php artisan db:seed`.
 2. `composer install` dan `npm install`.
 3. Development: `composer run dev` (Laravel + Vite + queue + logs).
-4. PLC: konfigurasi `python-modbus/.env` + `uvicorn`.
-5. CV (opsional): `camera/.env` + `python camera_stream.py`.
+4. PLC bridge: konfigurasi `python-modbus/.env` + `uvicorn`.
+5. CV (opsional, di Jetson Nano): buat `camera/.env` dari `.env.example`, `pip install -r requirements.txt`, `python camera_stream.py`.
 6. Dummy UI saja: `VITE_DASHBOARD_USE_DUMMY=true` — tidak perlu PLC/CV.
 
 Detail lengkap: [`PANDUAN_MENJALANKAN_SISTEM.md`](PANDUAN_MENJALANKAN_SISTEM.md).
@@ -89,7 +95,8 @@ Detail lengkap: [`PANDUAN_MENJALANKAN_SISTEM.md`](PANDUAN_MENJALANKAN_SISTEM.md)
 | [`SISTEM_CARA_KERJA_DAN_INDEKS_FILE.md`](SISTEM_CARA_KERJA_DAN_INDEKS_FILE.md) | Arsitektur, login, PLC, CV, diagram, indeks file |
 | [`PANDUAN_MENJALANKAN_SISTEM.md`](PANDUAN_MENJALANKAN_SISTEM.md)               | Instalasi langkah demi langkah                   |
 | [`PENJELASAN_CARA_KERJA_SISTEM.md`](PENJELASAN_CARA_KERJA_SISTEM.md)           | Alur pengguna dan rantai kode                    |
-| [`../ROADMAP-SCADA.md`](../ROADMAP-SCADA.md)                                   | Rencana penyempurnaan                            |
+| [`../camera/PANDUAN_CV.md`](../camera/PANDUAN_CV.md)                           | Panduan lengkap CV service (Jetson Nano)         |
+| [`../ROADMAP.md`](../ROADMAP.md)                                               | Rencana penyempurnaan                            |
 
 ---
 

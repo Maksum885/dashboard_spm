@@ -14,9 +14,6 @@ class CameraConnectionController extends Controller
     public function index(Request $request): View
     {
         $user = $request->user();
-        if ($user->role === 'viewer') {
-            abort(403, 'Viewers cannot open settings.');
-        }
 
         $q = TestingRoom::query()
             ->with(['controlRoom', 'roomCameras'])
@@ -63,9 +60,6 @@ class CameraConnectionController extends Controller
     public function update(Request $request, RoomCamera $room_camera): RedirectResponse
     {
         $user = $request->user();
-        if ($user->role === 'viewer') {
-            abort(403);
-        }
 
         $room_camera->loadMissing('testingRoom');
 
@@ -81,24 +75,14 @@ class CameraConnectionController extends Controller
         }
 
         $data = $request->validate([
-            'rtsp_host' => 'required|string|max:255',
-            'rtsp_port' => 'required|integer|min:1|max:65535',
-            'rtsp_path' => 'required|string|max:255',
-            'rtsp_username' => 'nullable|string|max:128',
-            'rtsp_password' => 'nullable|string|max:128',
+            'stream_url' => 'nullable|url|max:500',
             'is_enabled' => 'sometimes|boolean',
         ]);
 
         $data['is_enabled'] = $request->boolean('is_enabled');
-        if ($data['rtsp_password'] === null || $data['rtsp_password'] === '') {
-            unset($data['rtsp_password']);
-        }
 
         $room_camera->update($data);
 
-        return back()->with(
-            'status',
-            'Saved. Enabled cameras are picked up by the CV service within about 15 seconds.'
-        );
+        return back()->with('status', 'Camera settings saved.');
     }
 }

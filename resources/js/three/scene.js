@@ -491,7 +491,11 @@ export function createDashboardThreeScene({
         roofActuators.forEach((rec, buildingId) => {
             const room = findRoom(buildingId);
             const target = roofSlideTarget01(room);
-            rec.open01 = THREE.MathUtils.lerp(rec.open01, target, 0.06);
+            // Limit switch aktif → snap cepat; motor sedang jalan → gerak lambat simulasi atap
+            const atLimit = room && (room.reg_roof_open || room.reg_roof_closed);
+            const isMoving = room && (room.roof_moving_open || room.roof_moving_close);
+            const factor = atLimit ? 0.08 : isMoving ? 0.004 : 0.08;
+            rec.open01 = THREE.MathUtils.lerp(rec.open01, target, factor);
             const t = rec.slide * rec.open01;
             rec.left.position.x = rec.baseLX - t;
             rec.right.position.x = rec.baseRX + t;

@@ -56,31 +56,6 @@ function findRoomByApiId(apiRoomId) {
     return null;
 }
 
-function canShowPlcSettingsLink(user) {
-    return Boolean(user && user.role === "admin");
-}
-
-function canShowCameraSettingsLink(user) {
-    return Boolean(user && user.role === "admin");
-}
-
-function renderRoomSettingsLinksHtml(user, room) {
-    if (!room?.api_room_id) return "";
-    const links = [];
-    if (canShowPlcSettingsLink(user)) {
-        links.push(
-            `<a class="rp-plc-strip__link rp-plc-strip__link--pane" href="/settings/plc?testing_room_id=${room.api_room_id}"><i class="ti ti-settings"></i> PLC</a>`,
-        );
-    }
-    if (canShowCameraSettingsLink(user)) {
-        links.push(
-            `<a class="rp-plc-strip__link rp-plc-strip__link--pane" href="/settings/cameras?testing_room_id=${room.api_room_id}"><i class="ti ti-video"></i> Cameras</a>`,
-        );
-    }
-    if (!links.length) return "";
-    return `<div class="rp-pane-settings-links">${links.join("")}</div>`;
-}
-
 function renderPlcStatusBadge(status) {
     const st = status || "offline";
     const isOnline = st === "online";
@@ -98,14 +73,7 @@ function updateRoomPlcStrip(room) {
     if (u && u.role !== "viewer" && room?.api_room_id) {
         el.classList.remove("is-hidden");
         const st = room.plc_link_status || "offline";
-        const badge = renderPlcStatusBadge(st);
-        const plcLink = canShowPlcSettingsLink(u)
-            ? `<a class="rp-plc-strip__link" href="/settings/plc?testing_room_id=${room.api_room_id}"><i class="ti ti-settings"></i> PLC</a><span class="rp-plc-strip__sep" aria-hidden="true">·</span>`
-            : "";
-        const cameraLink = canShowCameraSettingsLink(u)
-            ? `<a class="rp-plc-strip__link" href="/settings/cameras?testing_room_id=${room.api_room_id}"><i class="ti ti-video"></i> Cameras</a><span class="rp-plc-strip__sep" aria-hidden="true">·</span>`
-            : "";
-        el.innerHTML = `${plcLink}${cameraLink}${badge}`;
+        el.innerHTML = renderPlcStatusBadge(st);
     } else {
         el.classList.add("is-hidden");
         el.innerHTML = "";
@@ -183,17 +151,7 @@ export function hasInletPressureAlarm(r) {
 }
 
 function sidebarRoomDotClass(r) {
-    if ((r.mode || "") === "MAINTENANCE") return "room-dot-st--mt";
-    if (
-        r.alarm_emergency ||
-        hasInletPressureAlarm(r) ||
-        r.alarm_motor ||
-        r.alarm_left_motor ||
-        r.alarm_right_motor
-    )
-        return "room-dot-st--wa";
-    if ((r.plc_link_status || "") === "online") return "room-dot-st--on";
-    return "room-dot-st--off";
+    return (r.plc_link_status || "") === "online" ? "room-dot-st--on" : "room-dot-st--off";
 }
 
 /**
@@ -227,29 +185,95 @@ function operationalTestStatusLabel(r) {
     return isRoomActivelyTesting(r) ? "Running" : "Idle";
 }
 
-/** OPEN | CLOSE saja (legacy STANDBY dinormalisasi). */
+/** OPEN | CLOSE | MOVING_OPEN | MOVING_CLOSE — prioritas: limit switch > motor running. */
 function normalizedRoofState(r) {
     if (r.reg_roof_open) return "OPEN";
     if (r.reg_roof_closed) return "CLOSE";
-    if (r.roof_moving_open) return "OPEN";
-    if (r.roof_moving_close) return "CLOSE";
+    if (r.roof_moving_open) return "MOVING_OPEN";
+    if (r.roof_moving_close) return "MOVING_CLOSE";
     const rs = String(r.roof_state || "CLOSE").toUpperCase();
-    return rs === "OPEN" ? "OPEN" : "CLOSE";
+    if (rs === "OPEN") return "OPEN";
+    return "CLOSE";
+}
+
+const DUMMY_ROOF_PRESETS = {
+    close:   { roof_state: "CLOSE", reg_roof_open: false, reg_roof_closed: true,  roof_moving_open: false, roof_moving_close: false },
+    closing: { roof_state: "CLOSE", reg_roof_open: false, reg_roof_closed: false, roof_moving_open: false, roof_moving_close: true  },
+    opening: { roof_state: "OPEN",  reg_roof_open: false, reg_roof_closed: false, roof_moving_open: true,  roof_moving_close: false },
+    open:    { roof_state: "OPEN",  reg_roof_open: true,  reg_roof_closed: false, roof_moving_open: false, roof_moving_close: false },
+};
+
+/**
+ * Demo roof — hanya saat VITE_DASHBOARD_USE_DUMMY=true.
+ * Tombol tampil di renderRoofPositionHtml(); panel peta 3D di demoRoofControls.js (admin).
+ */
+export function applyDummyRoofPreset(roomId, presetKey) {
+    if (!useDummyDashboard() || !roomId) return;
+    const preset = DUMMY_ROOF_PRESETS[presetKey];
+    const room = findRoom(roomId);
+    if (!room || !preset) return;
+    Object.assign(room, preset);
+    if (ui.panelMode === "room" && ui.curRoomId === roomId) {
+        const crId = findCR(roomId);
+        if (crId) renderRoomPanelPanes(room, crId);
+    }
 }
 
 function renderRoofPositionHtml(r) {
-    const open = normalizedRoofState(r) === "OPEN";
+    const state = normalizedRoofState(r);
+    const open = state === "OPEN";
+    if (useDummyDashboard()) {
+        const movOpen  = state === "MOVING_OPEN";
+        const movClose = state === "MOVING_CLOSE";
+        const closed   = state === "CLOSE";
+        return `
+  <div class="rp-overview-block rp-overview-block--roof">
+    <div class="section-label">Roof position</div>
+    <div class="roof-segment roof-segment--demo" role="group" aria-label="Demo roof control">
+      <button type="button" class="roof-segment__cell roof-segment__btn${open    ? " is-active is-open"   : ""}" onclick="applyDummyRoofPreset('${r.id}','open')">
+        <i class="ti ti-chevrons-up" aria-hidden="true"></i><span>OPEN</span>
+      </button>
+      <button type="button" class="roof-segment__cell roof-segment__btn${movOpen  ? " is-active is-moving" : ""}" onclick="applyDummyRoofPreset('${r.id}','opening')">
+        <i class="ti ti-chevrons-up" aria-hidden="true"></i><span>OPENING</span>
+      </button>
+      <button type="button" class="roof-segment__cell roof-segment__btn${movClose ? " is-active is-moving" : ""}" onclick="applyDummyRoofPreset('${r.id}','closing')">
+        <i class="ti ti-chevrons-down" aria-hidden="true"></i><span>CLOSING</span>
+      </button>
+      <button type="button" class="roof-segment__cell roof-segment__btn${closed   ? " is-active is-close"  : ""}" onclick="applyDummyRoofPreset('${r.id}','close')">
+        <i class="ti ti-chevrons-down" aria-hidden="true"></i><span>CLOSE</span>
+      </button>
+    </div>
+  </div>`;
+    }
+
+    let openCls = "";
+    let closeCls = "";
+    let openLabel = "OPEN";
+    let closeLabel = "CLOSE";
+
+    if (state === "OPEN") {
+        openCls = " is-active is-open";
+    } else if (state === "CLOSE") {
+        closeCls = " is-active is-close";
+    } else if (state === "MOVING_OPEN") {
+        openCls = " is-active is-moving";
+        openLabel = "OPENING…";
+    } else if (state === "MOVING_CLOSE") {
+        closeCls = " is-active is-moving";
+        closeLabel = "CLOSING…";
+    }
+
     return `
   <div class="rp-overview-block rp-overview-block--roof">
     <div class="section-label">Roof position</div>
-    <div class="roof-segment" role="status" aria-label="Roof ${open ? "open" : "closed"}">
-      <div class="roof-segment__cell${open ? " is-active is-open" : ""}">
+    <div class="roof-segment" role="status" aria-label="Roof ${state.toLowerCase().replace("_", " ")}">
+      <div class="roof-segment__cell${openCls}">
         <i class="ti ti-chevrons-up" aria-hidden="true"></i>
-        <span>OPEN</span>
+        <span>${openLabel}</span>
       </div>
-      <div class="roof-segment__cell${open ? "" : " is-active is-close"}">
+      <div class="roof-segment__cell${closeCls}">
         <i class="ti ti-chevrons-down" aria-hidden="true"></i>
-        <span>CLOSE</span>
+        <span>${closeLabel}</span>
       </div>
     </div>
   </div>`;
@@ -257,14 +281,17 @@ function renderRoofPositionHtml(r) {
 
 export function renderRoomPanelPanes(r, crId) {
     if (!r) return;
-    renderPaneOverview(r, crId);
+    // Don't blow away a focused pressure input mid-type
+    const skipOverview = useDummyDashboard() &&
+        document.activeElement?.classList.contains("demo-pressure-input");
+    if (!skipOverview) renderPaneOverview(r, crId);
     renderPaneLog(r);
 }
 
 function defaultRoomCameras() {
     return [
-        { slot: 1, name: "Kamera 1", enabled: false },
-        { slot: 2, name: "Kamera 2", enabled: false },
+        { slot: 1, name: "Camera 1", enabled: false },
+        { slot: 2, name: "Camera 2", enabled: false },
     ];
 }
 
@@ -275,7 +302,7 @@ function isCvHumanDetected(room, slot) {
 }
 
 function renderCameraTile(cam, room) {
-    const label = cam.name || `Kamera ${cam.slot}`;
+    const label = cam.name || `Camera ${cam.slot}`;
     if (!cvUiActive()) {
         return `
   <div class="cam-v2 cam-v2--off">
@@ -299,16 +326,15 @@ function renderCameraTile(cam, room) {
     <div class="cam-dummy-feed" aria-hidden="true">
       <span class="cam-dummy-feed__grid"></span>
       ${human ? '<i class="ti ti-user cam-dummy-feed__person"></i>' : '<i class="ti ti-video cam-dummy-feed__icon"></i>'}
-      <span class="cam-dummy-feed__tag">DEMO</span>
     </div>
     <span class="cam-v2-lbl">${label}</span>
-    <span class="cam-live">
-      <span class="cam-live-dot"></span>
-      DEMO
-    </span>
+    <span class="cam-live"><span class="cam-live-dot"></span></span>
   </div>`;
     }
-    if (!room?.api_room_id) {
+    // Gunakan stream_url dari admin settings jika tersedia, fallback ke cvBaseUrl path
+    const streamSrc = cam.stream_url
+        || (room?.api_room_id ? `${cvBaseUrl()}/stream/${room.api_room_id}/${cam.slot}` : null);
+    if (!streamSrc) {
         return `
   <div class="cam-v2 cam-v2--disabled">
     <i class="ti ti-video-off" aria-hidden="true"></i>
@@ -316,10 +342,14 @@ function renderCameraTile(cam, room) {
     <span class="cam-v2-lbl">${label}</span>
   </div>`;
     }
-    const src = `${cvBaseUrl()}/stream/${room.api_room_id}/${cam.slot}`;
+    const escapedSrc = streamSrc.replace(/'/g, "\\'");
+    const escapedLabel = label.replace(/'/g, "\\'");
     return `
   <div class="cam-v2">
-    <img src="${src}" class="cam-stream" alt="${label}">
+    <img src="${streamSrc}" class="cam-stream" alt="${label}">
+    <button class="cam-v2-expand" onclick="openCameraFullscreen('${escapedSrc}','${escapedLabel}');event.stopPropagation()" title="Perbesar">
+      <i class="ti ti-arrows-maximize" aria-hidden="true"></i>
+    </button>
     <span class="cam-v2-lbl">${label}</span>
     <span class="cam-live">
       <span class="cam-live-dot"></span>
@@ -347,7 +377,7 @@ function renderCameraSectionHtml(room) {
         : "";
     return `
 <div class="cam-toolbar-v2">
-  <div class="section-label cam-toolbar-v2__title">Kamera</div>
+  <div class="section-label cam-toolbar-v2__title">Camera</div>
   ${wideBtn}
 </div>
 <div class="cam-grid-v2">
@@ -379,20 +409,18 @@ export function toggleCameraWide() {
 }
 
 function renderPaneOverview(r, crId) {
-    const u = typeof window.__SCADA_USER__ !== "undefined" ? window.__SCADA_USER__ : null;
-    const settingsLinks = renderRoomSettingsLinksHtml(u, r);
     const p1 = Number(r.pres_bbm ?? r.test_pressure ?? 0);
     const p2 = Number(r.pres_2 ?? 0);
     const maint = r.mode === "MAINTENANCE";
     const testStatusLabel = operationalTestStatusLabel(r);
     const testActive = isRoomActivelyTesting(r);
     const locked = r.door_lock === "locked";
-    /** #40002 alarm_alert — ON/OFF (register bool), bukan label ALARM/Normal. */
     const emergOn = plcRegistersTrusted(r) && Boolean(r.alarm_emergency);
+    const dummy = useDummyDashboard();
 
-    document.getElementById("pane-o").innerHTML = `
-  ${settingsLinks}
-  ${renderCameraSectionHtml(r)}
+    const pressureSection = dummy
+        ? renderDummyPressureControls(r)
+        : `
   <div class="rp-overview-block">
     <div class="section-label">Pressure</div>
     <div class="sensor-grid-v2">
@@ -405,8 +433,11 @@ function renderPaneOverview(r, crId) {
         <div class="sv">${fmtPressurePsi(p2)}<span class="su"> PSI</span></div>
       </div>
     </div>
-  </div>
-  ${renderRoofPositionHtml(r)}
+  </div>`;
+
+    const opsSection = dummy
+        ? renderDummyOpControls(r)
+        : `
   <div class="rp-overview-block">
     <div class="section-label">Operational status</div>
     <div class="roof-card-v2">
@@ -427,7 +458,15 @@ function renderPaneOverview(r, crId) {
         <span class="st-badge-v2" style="${emergOn ? "background:#fee2e2;color:#b91c1c" : "background:#f3f4f6;color:#374151"}">${emergOn ? "ON" : "OFF"}</span>
       </div>
     </div>
-  </div>
+  </div>`;
+
+    document.getElementById("pane-o").innerHTML = `
+  ${renderCameraSectionHtml(r)}
+  ${pressureSection}
+  ${renderRoofPositionHtml(r)}
+  ${opsSection}
+  ${dummy ? renderDummyPlcControls(r) : ""}
+  ${dummy ? renderDummyAlarmTriggers(r) : ""}
   ${renderRoomAlarmSection(r)}`;
     syncCameraWideClass();
 }
@@ -469,8 +508,8 @@ const DUMMY_ALARM_LABELS = {
     left_motor: "LEFT MOTOR FAIL",
     right_motor: "RIGHT MOTOR FAIL",
     motor: "MOTOR FAIL",
-    human_1: "HUMAN — Kamera 1",
-    human_2: "HUMAN — Kamera 2",
+    human_1: "HUMAN DETECTED — Camera 1",
+    human_2: "HUMAN DETECTED — Camera 2",
 };
 
 /**
@@ -528,6 +567,211 @@ export function ackDummyRoomAlarm(roomId, alarmKey) {
     }
 }
 
+/* ── Demo simulation render helpers ──────────────────────────────────────── */
+
+function renderDummyPressureControls(r) {
+    const p1 = Number(r.pres_bbm ?? r.test_pressure ?? 0).toFixed(1);
+    const p2 = Number(r.pres_2 ?? 0).toFixed(1);
+    return `
+  <div class="rp-overview-block">
+    <div class="section-label">Pressure</div>
+    <div class="sensor-grid-v2">
+      <div class="sensor-card-v2">
+        <label class="sn" for="dp1-${r.id}">Pressure 1</label>
+        <div class="sv"><input type="number" id="dp1-${r.id}" class="demo-pressure-input demo-pres-inline"
+          value="${p1}" min="0" max="9999" step="0.1"
+          oninput="setDummyPressure('${r.id}',1,this.value)"
+          onchange="setDummyPressure('${r.id}',1,this.value)"><span class="su"> PSI</span></div>
+      </div>
+      <div class="sensor-card-v2">
+        <label class="sn" for="dp2-${r.id}">Pressure 2</label>
+        <div class="sv"><input type="number" id="dp2-${r.id}" class="demo-pressure-input demo-pres-inline"
+          value="${p2}" min="0" max="9999" step="0.1"
+          oninput="setDummyPressure('${r.id}',2,this.value)"
+          onchange="setDummyPressure('${r.id}',2,this.value)"><span class="su"> PSI</span></div>
+      </div>
+    </div>
+  </div>`;
+}
+
+function renderDummyOpControls(r) {
+    const maint   = r.mode === "MAINTENANCE";
+    const running = isRoomActivelyTesting(r);
+    const locked  = r.door_lock === "locked";
+    const emergOn = Boolean(r.alarm_emergency);
+    return `
+  <div class="rp-overview-block">
+    <div class="section-label">Operational status</div>
+    <div class="roof-card-v2">
+      <div class="roof-row-v2">
+        <span class="rp-field-label">Panel mode</span>
+        <button class="st-badge-v2 st-badge-v2--btn"
+                style="${maint ? "background:#ede9fe;color:#7c3aed" : "background:#dbeafe;color:#1e40af"}"
+                onclick="setDummyPanelMode('${r.id}','${maint ? "AUTO" : "MAINTENANCE"}')" title="Klik untuk ganti mode">
+          ${maint ? "Maintenance" : "Auto"} <span class="st-badge-chev">&#9662;</span>
+        </button>
+      </div>
+      <div class="roof-row-v2">
+        <span class="rp-field-label">Test status</span>
+        <button class="st-badge-v2 st-badge-v2--btn"
+                style="${running ? "background:#dcfce7;color:#15803d" : "background:#f3f4f6;color:#374151"}"
+                onclick="setDummyTestStatus('${r.id}','${running ? "STANDBY" : "RUNNING"}')" title="Klik untuk ganti status">
+          ${running ? "Running" : "Idle"} <span class="st-badge-chev">&#9662;</span>
+        </button>
+      </div>
+      <div class="roof-row-v2">
+        <span class="rp-field-label">Access door</span>
+        <button class="st-badge-v2 st-badge-v2--btn"
+                style="${locked ? "background:#fee2e2;color:#b91c1c" : "background:#dcfce7;color:#15803d"}"
+                onclick="setDummyDoorLock('${r.id}','${locked ? "unlocked" : "locked"}')" title="Klik untuk ganti status pintu">
+          <i class="ti ${locked ? "ti-lock" : "ti-lock-open"}"></i> ${locked ? "Locked" : "Unlocked"} <span class="st-badge-chev">&#9662;</span>
+        </button>
+      </div>
+      <div class="roof-row-v2">
+        <span class="rp-field-label">Emergency</span>
+        <button class="st-badge-v2 st-badge-v2--btn"
+                style="${emergOn ? "background:#fee2e2;color:#b91c1c" : "background:#f3f4f6;color:#374151"}"
+                onclick="setDummyEmergency('${r.id}',${emergOn ? "false" : "true"})" title="Klik untuk toggle emergency">
+          ${emergOn ? "ON" : "OFF"} <span class="st-badge-chev">&#9662;</span>
+        </button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function renderDummyPlcControls(r) {
+    const online = (r.plc_link_status || "") === "online";
+    const stOnline  = online  ? "background:#15803d;color:#fff;border-color:#166534"   : "background:#f0fdf4;color:#166534;border-color:#bbf7d0";
+    const stOffline = !online ? "background:#b91c1c;color:#fff;border-color:#991b1b"   : "background:#fecaca;color:#991b1b;border-color:#fca5a5";
+    return `
+  <div class="rp-overview-block">
+    <div class="section-label">PLC connection</div>
+    <div class="demo-seg">
+      <button class="demo-seg__btn" style="${stOnline}"  onclick="setDummyPlcStatus('${r.id}','online')"><i class="ti ti-plug-connected"></i> Online</button>
+      <button class="demo-seg__btn" style="${stOffline}" onclick="setDummyPlcStatus('${r.id}','offline')"><i class="ti ti-plug-off"></i> Offline</button>
+    </div>
+  </div>`;
+}
+
+function renderDummyAlarmTriggers(r) {
+    const motorBtns = r.dual_motor
+        ? `<button class="demo-trigger-btn demo-trigger-btn--warn" onclick="triggerDummyAlarm('${r.id}','left_motor')">Left Motor Fail</button>
+           <button class="demo-trigger-btn demo-trigger-btn--warn" onclick="triggerDummyAlarm('${r.id}','right_motor')">Right Motor Fail</button>`
+        : `<button class="demo-trigger-btn demo-trigger-btn--warn" onclick="triggerDummyAlarm('${r.id}','motor')">Motor Fail</button>`;
+    return `
+  <div class="rp-overview-block">
+    <div class="section-label">Trigger alarm</div>
+    <div class="demo-trigger-grid">
+      <button class="demo-trigger-btn demo-trigger-btn--danger" onclick="triggerDummyAlarm('${r.id}','emergency')">Emergency</button>
+      ${motorBtns}
+      <button class="demo-trigger-btn demo-trigger-btn--warn" onclick="triggerDummyAlarm('${r.id}','pressure_in')">Pressure Alarm</button>
+      <button class="demo-trigger-btn demo-trigger-btn--info" onclick="triggerDummyAlarm('${r.id}','human_1')">Human Cam 1</button>
+      <button class="demo-trigger-btn demo-trigger-btn--info" onclick="triggerDummyAlarm('${r.id}','human_2')">Human Cam 2</button>
+    </div>
+  </div>`;
+}
+
+/* ── Demo simulation setters ──────────────────────────────────────────────── */
+
+function dummyRoomLog(room, cls, msg) {
+    if (!Array.isArray(room.events)) room.events = [];
+    room.events.unshift({ t: getNow(), c: cls, m: msg });
+    if (room.events.length > 20) room.events.length = 20;
+}
+
+function dummyRefreshRoom(roomId, room) {
+    buildSidebarRooms();
+    updateAlarmSidebar();
+    if (ui.panelMode === "room" && ui.curRoomId === roomId) {
+        const crId = findCR(roomId);
+        if (crId) renderRoomPanelPanes(room, crId);
+    }
+}
+
+export function setDummyPressure(roomId, slot, value) {
+    if (!useDummyDashboard() || !roomId) return;
+    const room = findRoom(roomId);
+    if (!room) return;
+    const v = parseFloat(value);
+    if (Number.isNaN(v) || v < 0) return;
+    if (String(slot) === "1") {
+        if (room.tp === "TEST PIT") room.test_pressure = v;
+        else room.pres_bbm = v;
+    } else {
+        room.pres_2 = v;
+    }
+}
+
+export function setDummyPanelMode(roomId, mode) {
+    if (!useDummyDashboard() || !roomId) return;
+    const room = findRoom(roomId);
+    if (!room) return;
+    room.mode = mode;
+    dummyRoomLog(room, mode === "MAINTENANCE" ? "wa" : "ok", `Panel mode → ${mode} (demo)`);
+    dummyRefreshRoom(roomId, room);
+}
+
+export function setDummyTestStatus(roomId, status) {
+    if (!useDummyDashboard() || !roomId) return;
+    const room = findRoom(roomId);
+    if (!room) return;
+    room.phase = status;
+    dummyRoomLog(room, status === "RUNNING" ? "ok" : "info", `Test status → ${status === "RUNNING" ? "Running" : "Idle"} (demo)`);
+    dummyRefreshRoom(roomId, room);
+}
+
+export function setDummyDoorLock(roomId, state) {
+    if (!useDummyDashboard() || !roomId) return;
+    const room = findRoom(roomId);
+    if (!room) return;
+    room.door_lock = state;
+    dummyRoomLog(room, state === "locked" ? "wa" : "ok", `Door → ${state} (demo)`);
+    buildSidebarRooms();
+    if (ui.panelMode === "room" && ui.curRoomId === roomId) {
+        const crId = findCR(roomId);
+        if (crId) renderRoomPanelPanes(room, crId);
+    }
+}
+
+export function setDummyEmergency(roomId, on) {
+    if (!useDummyDashboard() || !roomId) return;
+    const room = findRoom(roomId);
+    if (!room) return;
+    room.alarm_emergency = Boolean(on);
+    dummyAlarmAcks.get(roomId)?.delete("emergency");
+    dummyRoomLog(room, on ? "cr" : "ok", `Emergency → ${on ? "ACTIVE" : "cleared"} (demo)`);
+    dummyRefreshRoom(roomId, room);
+}
+
+export function setDummyPlcStatus(roomId, status) {
+    if (!useDummyDashboard() || !roomId) return;
+    const room = findRoom(roomId);
+    if (!room) return;
+    room.plc_link_status = status;
+    updateRoomPlcStrip(room);
+    dummyRoomLog(room, status === "online" ? "ok" : "wa", `PLC → ${status} (demo)`);
+    dummyRefreshRoom(roomId, room);
+}
+
+export function triggerDummyAlarm(roomId, alarmKey) {
+    if (!useDummyDashboard() || !roomId) return;
+    if (alarmKey === "human_1") { setDummyCvDetection(roomId, 1, true); return; }
+    if (alarmKey === "human_2") { setDummyCvDetection(roomId, 2, true); return; }
+    const room = findRoom(roomId);
+    if (!room) return;
+    dummyAlarmAcks.get(roomId)?.delete(alarmKey);
+    switch (alarmKey) {
+        case "emergency":    room.alarm_emergency = true; break;
+        case "pressure_in":  room.alarm_pressure_in = true; break;
+        case "left_motor":   room.alarm_left_motor = true; break;
+        case "right_motor":  room.alarm_right_motor = true; break;
+        case "motor":        room.alarm_motor = true; break;
+    }
+    const label = DUMMY_ALARM_LABELS[alarmKey] || alarmKey;
+    dummyRoomLog(room, "cr", `${label} — triggered (demo)`);
+    dummyRefreshRoom(roomId, room);
+}
+
 function renderRoomAlarmSection(r) {
     const rows = [];
     if (r.alarm_emergency && plcRegistersTrusted(r))
@@ -542,25 +786,46 @@ function renderRoomAlarmSection(r) {
     } else if (r.alarm_motor) {
         rows.push({ key: "motor", t: "MOTOR FAIL", sub: r.nm });
     }
-    if (useDummyDashboard()) {
-        (r.cameras || defaultRoomCameras()).forEach((cam) => {
-            if (!cam.enabled || !isCvHumanDetected(r, cam.slot)) return;
-            if (dummyAlarmAcks.get(r.id)?.has(`human_${cam.slot}`)) return;
-            rows.push({
-                key: `human_${cam.slot}`,
-                t: `HUMAN — ${cam.name || `Kamera ${cam.slot}`}`,
-                sub: "CV demo detection",
+    // Alarm CV — dua sumber:
+    // - Dummy mode: cvDetections dari initDummyCvState() (per slot)
+    // - Live mode: r.alarm_cv_person dari PLC register 40010 via AlarmLog (per room)
+    if (cvUiActive()) {
+        if (useDummyDashboard()) {
+            (r.cameras || defaultRoomCameras()).forEach((cam) => {
+                if (!cam.enabled) return;
+                if (!isCvHumanDetected(r, cam.slot)) return;
+                if (dummyAlarmAcks.get(r.id)?.has(`human_${cam.slot}`)) return;
+                rows.push({
+                    key: `human_${cam.slot}`,
+                    t: `HUMAN DETECTED —${cam.name || `Camera ${cam.slot}`}`,
+                    sub: "CV demo detection",
+                });
             });
-        });
+        } else {
+            // Live: cek alarm dari PLC (r.alarm_cv_person) ATAU polling /alarm_status (isCvHumanDetected)
+            (r.cameras || []).forEach((cam) => {
+                if (!cam.enabled) return;
+                if (!r.alarm_cv_person && !isCvHumanDetected(r, cam.slot)) return;
+                rows.push({
+                    key: `human_${cam.slot}`,
+                    t: `HUMAN DETECTED —${cam.name || `Camera ${cam.slot}`}`,
+                    sub: "CV: Person detected in test area",
+                });
+            });
+        }
     }
     if (!rows.length)
         return `<div class="section-label" style="margin-top:10px">Room alarms</div><div style="font-size:11px;color:#6b7280">No active alarms in this room.</div>`;
     const dummy = useDummyDashboard();
+    const scadaUser = typeof window.__SCADA_USER__ !== "undefined" ? window.__SCADA_USER__ : null;
+    const isAdmin = scadaUser?.role === "admin";
     let h = `<div class="section-label" style="margin-top:10px">Room alarms</div>`;
     rows.forEach((x) => {
         const ackBtn = dummy
-            ? `<button type="button" class="btn-ack" onclick="ackDummyRoomAlarm('${r.id}','${x.key}')" title="Acknowledge (demo — reset setelah refresh halaman)">ACK</button>`
-            : `<button type="button" class="btn-ack" disabled title="Acknowledge alarm PLC / layanan alarm (bukan mode dummy)">ACK</button>`;
+            ? (isAdmin ? "" : `<button type="button" class="btn-ack" onclick="ackDummyRoomAlarm('${r.id}','${x.key}')" title="Acknowledge (demo — resets on page refresh)">ACK</button>`)
+            : isAdmin
+                ? ""
+                : `<button type="button" class="btn-ack" disabled title="Acknowledge PLC alarm (live mode)">ACK</button>`;
         h += `<div class="alarm-room-v2">
     <i class="ti ti-alert-triangle" style="font-size:15px;color:var(--cr)"></i>
     <div style="flex:1"><div class="alarm-room-title">${x.t}</div><div class="alarm-room-sub">${x.sub}</div></div>
@@ -594,16 +859,29 @@ function roomSidebarRowHtml(r, crId) {
 }
 
 export function buildSidebarRooms() {
+    const scadaUser = typeof window.__SCADA_USER__ !== "undefined" ? window.__SCADA_USER__ : null;
+    const scopedRoomId = scadaUser?.testing_room_id ? Number(scadaUser.testing_room_id) : null;
+    const roomVisible = (r) => !scopedRoomId || Number(r.api_room_id) === scopedRoomId;
+
     const flatEl = document.getElementById("rooms-flat");
     if (flatEl) {
         const pairs = [];
         Object.entries(store.data).forEach(([crId, d]) => {
-            (d.rooms || []).forEach((r) => pairs.push({ r, crId }));
+            (d.rooms || []).forEach((r) => {
+                if (roomVisible(r)) pairs.push({ r, crId });
+            });
         });
         pairs.sort((a, b) =>
             (a.r.nm || "").localeCompare(b.r.nm || "", undefined, { numeric: true, sensitivity: "base" }),
         );
         flatEl.innerHTML = pairs.map(({ r, crId }) => roomSidebarRowHtml(r, crId)).join("");
+
+        // Auto-open the single assigned room for scoped operators
+        if (scopedRoomId && pairs.length === 1 && !ui.curRoomId) {
+            const { r, crId } = pairs[0];
+            setTimeout(() => openRoomPanel(r.id, crId), 120);
+        }
+
         updateCenterStatusBar();
         return;
     }
@@ -879,7 +1157,7 @@ function getSidebarEmergencyAlerts() {
     const out = [];
     for (const [crId, d] of Object.entries(store.data)) {
         for (const r of d.rooms) {
-            if ((r.plc_link_status || "") === "online" && r.alarm_emergency)
+            if (plcRegistersTrusted(r) && r.alarm_emergency)
                 pushAlarm(out, "cr", `${r.nm}`, "EMERGENCY", crId, r.id);
         }
     }
@@ -951,7 +1229,7 @@ export function setDummyCvDetection(roomId, slot, detected) {
     if (room) {
         if (!Array.isArray(room.events)) room.events = [];
         const cam = room.cameras?.find((c) => Number(c.slot) === Number(slot));
-        const camLabel = cam?.name || `Kamera ${slot}`;
+        const camLabel = cam?.name || `Camera ${slot}`;
         room.events.unshift({
             t: getNow(),
             c: next ? "cr" : "ok",
@@ -970,12 +1248,20 @@ function initDummyCvState() {
 
 /** Satu daftar sidebar: emergency, pressure in, motor, lalu CV human. */
 export function getSidebarCombinedAlerts() {
-    return [
+    const all = [
         ...getSidebarEmergencyAlerts(),
         ...getSidebarPressureInAlerts(),
         ...getSidebarAlarms(),
         ...getCvHumanAlerts(),
     ];
+    const scadaUser = typeof window.__SCADA_USER__ !== "undefined" ? window.__SCADA_USER__ : null;
+    const scopedApiId = scadaUser?.testing_room_id ? Number(scadaUser.testing_room_id) : null;
+    if (!scopedApiId) return all;
+    return all.filter((a) => {
+        if (!a.roomId) return false;
+        const room = findRoom(a.roomId);
+        return room && Number(room.api_room_id) === scopedApiId;
+    });
 }
 
 export function getNow() {
@@ -1084,6 +1370,10 @@ function applySnapshotToRoom(room, snapshot) {
     const rawIn = Number(extractSnapshotValue(snapshot, ["40001", "tekanan_masuk", "line_pressure"], NaN));
     const processPressure = Number(extractSnapshotValue(snapshot, ["40011", "pressure_1"], NaN));
     const pres2 = Number(extractSnapshotValue(snapshot, ["40012", "pressure_2"], NaN));
+    // Register 40010 = Holding Register 10 = %MW9 = cv_person_detected (ditulis Jetson Nano via FC6)
+    const cvPersonDetectedPlc = Boolean(
+        extractSnapshotValue(snapshot, ["40010", "cv_person_detected"], false),
+    );
     const alarmAlert = Boolean(extractSnapshotValue(snapshot, ["40002", "alarm_alert"], false));
     const maintenance = Boolean(extractSnapshotValue(snapshot, ["40003", "mode_maintenance"], false));
     const roofClosed = Boolean(extractSnapshotValue(snapshot, ["40004", "roof_tertutup"], false));
@@ -1121,8 +1411,11 @@ function applySnapshotToRoom(room, snapshot) {
     else if (roofMovingClose) room.roof_state = "CLOSE";
     else room.roof_state = "CLOSE";
 
-    /* Hanya percaya #40002 jika ruang bertanda PLC online (hindari cache lama saat putus). */
+    /* Hanya percaya register PLC jika ruang bertanda online (hindari cache lama saat putus). */
     room.alarm_emergency = plcLive && alarmAlert;
+    // cv_person_detected dari PLC register 40010 (Holding Register 10 = %MW9)
+    // Dipakai sebagai backup sumber data saat /alarm_status tidak tersedia.
+    room.cv_person_detected_plc = plcLive && cvPersonDetectedPlc;
     room.mode = maintenance ? "MAINTENANCE" : "AUTO";
     room.door_lock = doorLocked ? "locked" : "unlocked";
     room.phase = testingOn ? "RUNNING" : "STANDBY";
@@ -1299,6 +1592,29 @@ export function initCvMonitoring() {
     cvPollTimer = setInterval(pollCvAlarmStatus, 1000);
 }
 
+function _camFsKeydown(e) {
+    if (e.key === "Escape") closeCameraFullscreen();
+}
+
+export function openCameraFullscreen(src, label) {
+    const overlay = document.getElementById("cam-fullscreen");
+    const img = document.getElementById("cam-fs-img");
+    const lbl = document.getElementById("cam-fs-label");
+    if (!overlay || !img) return;
+    if (lbl) lbl.textContent = label;
+    img.src = src;
+    overlay.removeAttribute("hidden");
+    document.addEventListener("keydown", _camFsKeydown);
+}
+
+export function closeCameraFullscreen() {
+    const overlay = document.getElementById("cam-fullscreen");
+    const img = document.getElementById("cam-fs-img");
+    if (img) img.src = "";
+    if (overlay) overlay.setAttribute("hidden", "");
+    document.removeEventListener("keydown", _camFsKeydown);
+}
+
 export function registerGlobals() {
     window.toggleSidebar = toggleSidebar;
     window.closeSidebar = closeSidebar;
@@ -1309,4 +1625,14 @@ export function registerGlobals() {
     window.toggleRooms = toggleRooms;
     window.toggleCameraWide = toggleCameraWide;
     window.ackDummyRoomAlarm = ackDummyRoomAlarm;
+    window.applyDummyRoofPreset = applyDummyRoofPreset;
+    window.openCameraFullscreen = openCameraFullscreen;
+    window.closeCameraFullscreen = closeCameraFullscreen;
+    window.setDummyPressure = setDummyPressure;
+    window.setDummyPanelMode = setDummyPanelMode;
+    window.setDummyTestStatus = setDummyTestStatus;
+    window.setDummyDoorLock = setDummyDoorLock;
+    window.setDummyEmergency = setDummyEmergency;
+    window.setDummyPlcStatus = setDummyPlcStatus;
+    window.triggerDummyAlarm = triggerDummyAlarm;
 }

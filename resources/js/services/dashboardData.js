@@ -22,8 +22,8 @@ const DUMMY_ROOM_API_IDS = {
 };
 
 const DUMMY_ROOM_CAMERAS = [
-    { slot: 1, name: 'Kamera 1', enabled: true },
-    { slot: 2, name: 'Kamera 2', enabled: true },
+    { slot: 1, name: 'Camera 1', enabled: true },
+    { slot: 2, name: 'Camera 2', enabled: true },
 ];
 
 function enrichDummyRooms(controlRooms) {

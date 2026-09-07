@@ -9,24 +9,6 @@ function isAdminUser() {
     return u && u.role === "admin";
 }
 
-/** Preset atap — selaras dengan roofSlideTarget01 & panel kanan. */
-const ROOF_PRESETS = {
-    close: {
-        roof_state: "CLOSE",
-        reg_roof_open: false,
-        reg_roof_closed: true,
-        roof_moving_open: false,
-        roof_moving_close: false,
-    },
-    open: {
-        roof_state: "OPEN",
-        reg_roof_open: true,
-        reg_roof_closed: false,
-        roof_moving_open: false,
-        roof_moving_close: false,
-    },
-};
-
 function collectRooms() {
     const list = [];
     for (const d of Object.values(store.data)) {
@@ -38,15 +20,9 @@ function collectRooms() {
     return list;
 }
 
-function applyPresetToRoom(room, presetKey) {
-    const preset = ROOF_PRESETS[presetKey];
-    if (!room || !preset) return;
-    Object.assign(room, preset);
-}
-
 /**
  * Panel demo atap (hanya admin + VITE_DASHBOARD_USE_DUMMY=true).
- * @param {{ findRoom: Function, findCR: Function, renderRoomPanelPanes: Function }} main
+ * @param {{ findRoom: Function, findCR: Function, renderRoomPanelPanes: Function, applyDummyRoofPreset: Function }} main
  */
 export function initDemoRoofControls(main) {
     if (!dummyDashboardEnabled() || !isAdminUser()) return;
@@ -96,9 +72,7 @@ export function initDemoRoofControls(main) {
 
     function onPreset(presetKey) {
         const roomId = selectEl.value;
-        const room = main.findRoom(roomId);
-        if (!room) return;
-        applyPresetToRoom(room, presetKey);
+        main.applyDummyRoofPreset(roomId, presetKey);
         refreshRoomPanelIfOpen(roomId);
     }
 

@@ -33,7 +33,7 @@
         <i class="ti ti-history" aria-hidden="true"></i>
         <span><strong>PLC register log</strong><small>Value change history</small></span>
       </a>
-    @elseif(auth()->user()->role !== 'viewer')
+    @elseif(auth()->user()->role === 'operator')
       <div class="dash-profile-dd-head">Settings</div>
       <a href="{{ route('settings.plc') }}" class="dash-profile-dd-item" role="menuitem">
         <i class="ti ti-plug-connected" aria-hidden="true"></i>

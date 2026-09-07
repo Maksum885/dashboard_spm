@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SPM Testing Bay</title>
+<title>Testing Bay</title>
 <link rel="icon" type="image/png" href="{{ asset('images/logospm4.png') }}">
 @vite(['resources/css/dashboard.css', 'resources/js/app.js'])
 @if(session('api_token'))
@@ -12,8 +12,11 @@
 </script>
 @endif
 @auth
+@php
+$__su = ['role' => auth()->user()->role, 'name' => auth()->user()->name, 'testing_room_id' => auth()->user()->testing_room_id, 'control_room_id' => auth()->user()->control_room_id];
+@endphp
 <script>
-  window.__SCADA_USER__ = @json(['role' => auth()->user()->role, 'name' => auth()->user()->name]);
+  window.__SCADA_USER__ = @json($__su);
 </script>
 @endauth
 </head>
@@ -132,6 +135,17 @@
 
 <div class="overlay" id="overlay" onclick="closeSidebar()"></div>
 
+{{-- Fullscreen camera overlay --}}
+<div id="cam-fullscreen" class="cam-fs-overlay" hidden aria-modal="true" role="dialog">
+  <div class="cam-fs-header">
+    <span class="cam-live" style="flex-shrink:0"><span class="cam-live-dot"></span>LIVE</span>
+    <span id="cam-fs-label" class="cam-fs-label"></span>
+    <button class="cam-fs-close" onclick="closeCameraFullscreen()" title="Tutup (Esc)">
+      <i class="ti ti-x" aria-hidden="true"></i>
+    </button>
+  </div>
+  <img id="cam-fs-img" src="" class="cam-fs-img" alt="Camera stream fullscreen">
+</div>
 <div class="toast" id="toast"></div>
 <span id="hkpi-alarm" class="dashboard-kpi-hidden"></span>
 <span id="hkpi-alarm-dot" class="dashboard-kpi-hidden"></span>

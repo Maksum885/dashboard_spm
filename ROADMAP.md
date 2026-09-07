@@ -1,4 +1,4 @@
-# Roadmap Penyempurnaan SPM-SCADA
+# Roadmap Penyempurnaan Testing Bay
 
 Dokumen ini merapikan rencana perbaikan agar transisi dari mode simulasi ke mode produksi berjalan aman dan bertahap.
 
@@ -31,8 +31,10 @@ Dokumen ini merapikan rencana perbaikan agar transisi dari mode simulasi ke mode
 - [x] Flask multi-room: RTSP, YOLO, MJPEG `/stream/{room}/{slot}`, `/alarm_status`.
 - [x] Dashboard: `VITE_CV_*`, stream per ruang, alarm human di sidebar.
 - [x] Mode dummy: feed DEMO, panel Demo CV, alarm contoh + ACK.
+- [x] Tulis hasil deteksi CV ke Holding Register 10 PLC (`plc_writer.py` via FC6, pymodbus 2.5.3).
+- [x] Register 40010 (`cv_person_detected`) ditangkap webhook Laravel → `AlarmLog` `CV_PERSON_DETECTED`.
+- [x] GStreamer pipeline `avdec_h264` (software decoder, kompatibel Hikvision) di `camera_manager.py`.
 - [ ] Status koneksi RTSP per kamera di Settings (online/offline).
-- [ ] Simpan log alarm human ke database (bukan hanya in-memory / polling).
 
 ## 4) Auth & Authorization
 

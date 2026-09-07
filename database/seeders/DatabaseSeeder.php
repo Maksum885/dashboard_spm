@@ -90,19 +90,8 @@ class DatabaseSeeder extends Seeder
             ]);
         }
 
-        User::create([
-            'name'            => 'Viewer · Test Pit 1',
-            'email'           => 'viewer.room1@spm-scada.com',
-            'password'        => Hash::make('viewer123'),
-            'role'            => 'viewer',
-            'testing_room_id' => TestingRoom::where('code', 'TP1')->value('id'),
-            'control_room_id' => $cr2->id,
-            'is_active'       => true,
-        ]);
-
         $this->command->info('✓ Seed selesai!');
         $this->command->line('  Admin: admin@spm-scada.com / admin123');
         $this->command->line('  Operator room N: operator.room{N}@spm-scada.com / operator123  (N = 1…11)');
-        $this->command->line('  Viewer room 1: viewer.room1@spm-scada.com / viewer123');
     }
 }

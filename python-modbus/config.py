@@ -11,7 +11,7 @@ MODBUS_TIMEOUT = float(os.getenv("MODBUS_TIMEOUT", "3.0"))
 
 # ─── Polling ──────────────────────────────────────────────────────────────────
 
-POLL_INTERVAL_SEC = float(os.getenv("POLL_INTERVAL_SEC", "5.0"))
+POLL_INTERVAL_SEC = float(os.getenv("POLL_INTERVAL_SEC", "1.0"))
 
 # ─── Laravel integration ──────────────────────────────────────────────────────
 

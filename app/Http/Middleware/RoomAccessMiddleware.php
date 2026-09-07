@@ -17,8 +17,8 @@ class RoomAccessMiddleware
             return $next($request);
         }
 
-        // Operator & viewer: satu testing room, atau (legacy) semua room di control room yang sama
-        if (in_array($user->role, ['operator', 'viewer'], true) && $roomId) {
+        // Operator: satu testing room, atau semua room di control room yang sama
+        if ($user->role === 'operator' && $roomId) {
             if ($user->canAccessTestingRoomId((int) $roomId)) {
                 return $next($request);
             }

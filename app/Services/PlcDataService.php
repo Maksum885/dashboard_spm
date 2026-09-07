@@ -164,6 +164,7 @@ class PlcDataService
             'alarm_left_motor' => $alarms['left_motor'],
             'alarm_right_motor' => $alarms['right_motor'],
             'alarm_motor' => $alarms['motor'],
+            'alarm_cv_person' => $alarms['cv_person'],
             'events' => $events,
         ];
 
@@ -191,6 +192,7 @@ class PlcDataService
                 'slot' => (int) $cam->slot,
                 'name' => $cam->name,
                 'enabled' => (bool) $cam->is_enabled,
+                'stream_url' => $cam->stream_url ?: null,
             ])
             ->values()
             ->all();
@@ -305,6 +307,7 @@ class PlcDataService
             'left_motor' => str_contains($haystack, 'LEFT'),
             'right_motor' => str_contains($haystack, 'RIGHT'),
             'motor' => str_contains($haystack, 'MOTOR'),
+            'cv_person' => str_contains($haystack, 'CV_PERSON_DETECTED'),
         ];
     }
 

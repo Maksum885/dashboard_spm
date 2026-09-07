@@ -23,14 +23,14 @@ class UserController extends Controller
             'name' => 'required|string|max:255',
             'email' => 'required|email|unique:users,email',
             'password' => 'required|string|min:8',
-            'role' => ['required', Rule::in(['admin', 'operator', 'viewer'])],
+            'role' => ['required', Rule::in(['admin', 'operator'])],
             'control_room_id' => 'nullable|exists:control_rooms,id',
             'is_active' => 'boolean',
         ]);
 
-        if (in_array($data['role'], ['operator', 'viewer'], true) && empty($data['control_room_id'])) {
+        if ($data['role'] === 'operator' && empty($data['control_room_id'])) {
             return response()->json([
-                'message' => 'Operator dan viewer wajib memiliki control_room_id.',
+                'message' => 'Operator wajib memiliki control_room_id.',
             ], 422);
         }
 
@@ -53,7 +53,7 @@ class UserController extends Controller
             'name' => 'sometimes|string|max:255',
             'email' => ['sometimes', 'email', Rule::unique('users', 'email')->ignore($user->id)],
             'password' => 'nullable|string|min:8',
-            'role' => ['sometimes', Rule::in(['admin', 'operator', 'viewer'])],
+            'role' => ['sometimes', Rule::in(['admin', 'operator'])],
             'control_room_id' => 'nullable|exists:control_rooms,id',
             'testing_room_id' => 'nullable|exists:testing_rooms,id',
             'is_active' => 'boolean',
@@ -69,9 +69,9 @@ class UserController extends Controller
         $crId = array_key_exists('control_room_id', $data) ? $data['control_room_id'] : $user->control_room_id;
         $trId = array_key_exists('testing_room_id', $data) ? $data['testing_room_id'] : $user->testing_room_id;
 
-        if (in_array($role, ['operator', 'viewer'], true) && ! $crId && ! $trId) {
+        if ($role === 'operator' && ! $crId && ! $trId) {
             return response()->json([
-                'message' => 'Operator/viewer wajib punya testing_room_id atau control_room_id.',
+                'message' => 'Operator wajib punya testing_room_id atau control_room_id.',
             ], 422);
         }
 

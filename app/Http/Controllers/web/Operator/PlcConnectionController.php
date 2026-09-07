@@ -13,9 +13,6 @@ class PlcConnectionController extends Controller
     public function index(Request $request): View
     {
         $user = $request->user();
-        if ($user->role === 'viewer') {
-            abort(403, 'Viewers cannot open settings.');
-        }
 
         $q = PlcDevice::query()
             ->with(['testingRoom.controlRoom'])
@@ -66,9 +63,6 @@ class PlcConnectionController extends Controller
     public function update(Request $request, PlcDevice $plc_device): RedirectResponse
     {
         $user = $request->user();
-        if ($user->role === 'viewer') {
-            abort(403);
-        }
 
         $plc_device->loadMissing('testingRoom');
 

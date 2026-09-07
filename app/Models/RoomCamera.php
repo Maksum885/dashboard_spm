@@ -17,6 +17,7 @@ class RoomCamera extends Model
         'rtsp_username',
         'rtsp_password',
         'is_enabled',
+        'stream_url',
     ];
 
     protected function casts(): array

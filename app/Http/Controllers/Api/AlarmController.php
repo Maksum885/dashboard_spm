@@ -32,9 +32,6 @@ class AlarmController extends Controller
     public function acknowledge(Request $request, int $id)
     {
         $user = $request->user();
-        if ($user->role === 'viewer') {
-            return response()->json(['message' => 'Viewer tidak dapat meng-ack alarm.'], 403);
-        }
 
         $alarm = AlarmLog::findOrFail($id);
         if (! $this->alarmService->userMayAccessAlarm($user, $alarm)) {
@@ -57,9 +54,6 @@ class AlarmController extends Controller
     public function resolve(Request $request, int $id)
     {
         $user = $request->user();
-        if ($user->role === 'viewer') {
-            return response()->json(['message' => 'Viewer tidak dapat resolve alarm.'], 403);
-        }
 
         $alarm = AlarmLog::findOrFail($id);
         if (! $this->alarmService->userMayAccessAlarm($user, $alarm)) {

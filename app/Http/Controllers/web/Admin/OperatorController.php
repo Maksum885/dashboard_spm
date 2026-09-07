@@ -119,7 +119,7 @@ class OperatorController extends Controller
                 'max:255',
                 Rule::unique('users', 'email')->ignore($userId),
             ],
-            'role' => ['required', Rule::in(['admin', 'operator', 'viewer'])],
+            'role' => ['required', Rule::in(['admin', 'operator'])],
             'control_room_id' => ['nullable', 'exists:control_rooms,id'],
             'testing_room_id' => ['nullable', 'exists:testing_rooms,id'],
             'is_active' => ['sometimes', 'boolean'],
@@ -137,7 +137,7 @@ class OperatorController extends Controller
         $crId = $data['control_room_id'] ?? null;
         $trId = $data['testing_room_id'] ?? null;
 
-        if (in_array($role, ['operator', 'viewer'], true) && ! $crId && ! $trId) {
+        if ($role === 'operator' && ! $crId && ! $trId) {
             throw ValidationException::withMessages([
                 'testing_room_id' => 'Select a testing room or control room for this role.',
             ]);

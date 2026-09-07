@@ -1,24 +1,36 @@
 """
 python-modbus/modbus/register_map.py
 
-Holding register map: 40001–40012 (skip 40010).
+Holding register map: 40001–40012 + 40010 sebagai CV register.
 40011 dan 40012 adalah float32 (masing-masing 2 word).
 
 FC3 read: address=0, count=14
-  word[0]  = 40001  tekanan_masuk   (uint16)
-  word[1]  = 40002  alarm_alert     (bool)
-  word[2]  = 40003  mode_maintenance(bool)
-  word[3]  = 40004  roof_tertutup   (bool)
-  word[4]  = 40005  roof_terbuka    (bool)
-  word[5]  = 40006  roof_bergerak_buka  (bool)
-  word[6]  = 40007  roof_bergerak_tutup (bool)
-  word[7]  = 40008  pintu_terkunci  (bool)
-  word[8]  = 40009  testing_dimulai (bool)
-  word[9]  = 40010  [SKIP]
+  word[0]  = 40001  tekanan_masuk        (uint16)
+  word[1]  = 40002  alarm_alert          (bool)
+  word[2]  = 40003  mode_maintenance     (bool)
+  word[3]  = 40004  roof_tertutup        (bool)
+  word[4]  = 40005  roof_terbuka         (bool)
+  word[5]  = 40006  roof_bergerak_buka   (bool)
+  word[6]  = 40007  roof_bergerak_tutup  (bool)
+  word[7]  = 40008  pintu_terkunci       (bool)
+  word[8]  = 40009  testing_dimulai      (bool)
+  word[9]  = 40010  cv_person_detected   (bool) ← BARU: ditulis Jetson Nano via FC6
   word[10] = 40011  pressure_1 high word  ─┐ float32
   word[11] = 40011  pressure_1 low  word  ─┘
   word[12] = 40012  pressure_2 high word  ─┐ float32
   word[13] = 40012  pressure_2 low  word  ─┘
+
+CATATAN REGISTER CV (40010):
+  Modbus "holding register 10" = address 40010 = PDU 9 (0-based) = %MW9 di Schneider M221.
+  Jetson Nano menulis ke PDU 9 via FC6 (Write Single Register):
+    CV_PLC_WRITE_ADDRESS = 9  ← di camera/.env
+    Nilai 1 = orang terdeteksi → PLC menghidupkan aktuator (lampu)
+    Nilai 0 = tidak ada orang  → PLC mematikan aktuator
+  PLC Schneider M221 ladder logic membaca %MW9 dan mengarahkan ke output coil lampu.
+  python-modbus membaca word[9] = PDU 9 = 40010 dan melaporkan ke Laravel webhook.
+
+  Dalam detect_person_rtsp.py di Jetson:  REGISTER_ADDR = 9  (PDU address, bukan label 40010!)
+  Dalam camera/.env kita:                  CV_PLC_WRITE_ADDRESS=9
 
 CATATAN float32:
   Schneider Modbus default = big-endian (ABCD = ">f").
@@ -84,7 +96,17 @@ REGISTER_MAP: dict[int, dict] = {
         "type":        "bool",
         "change_type": "testing_started",
     },
-    # 40010 sengaja di-skip (tidak dipakai di PLC)
+    # ── Register CV (ditulis Jetson Nano via Modbus TCP FC6) ─────────────────────
+    # "Holding Register 10" dalam Modbus standar = address 40010 = PDU 9 = %MW9 Schneider M221.
+    # Jetson menulis 1 (ada orang) atau 0 (tidak ada) setiap kali state deteksi berubah.
+    # PLC ladder logic membaca %MW9 dan menghidupkan/mematikan aktuator lampu.
+    # Sebelumnya register ini di-skip; sekarang dipakai untuk CV detection.
+    40010: {
+        "key":         "cv_person_detected",
+        "desc":        "CV: Orang terdeteksi di area kamera (Jetson Nano FC6, Holding Register 10 = %MW9)",
+        "type":        "bool",
+        "change_type": "cv_alarm_triggered",
+    },
     40011: {
         "key":         "pressure_1",
         "desc":        "Pressure 1 (PSI)",
@@ -107,15 +129,15 @@ REGISTER_MAP: dict[int, dict] = {
 REGISTER_START: int = 0
 
 # Jumlah word yang dibaca:
-#   40001–40009 = 9 word (index 0-8)
-#   40010       = 1 word skip (index 9)
-#   40011       = 2 word float32 (index 10-11)
-#   40012       = 2 word float32 (index 12-13)
-#   Total       = 14 word
+#   40001–40009      = 9 word (index 0-8)
+#   40010 (CV)       = 1 word bool (index 9)  ← Holding Register 10 = %MW9, ditulis Jetson Nano
+#   40011 (press_1)  = 2 word float32 (index 10-11)
+#   40012 (press_2)  = 2 word float32 (index 12-13)
+#   Total            = 14 word
 #
 # PENTING: kalau PLC Schneider error Illegal Data Address (code 2),
-# coba kurangi: MODBUS_HOLDING_COUNT=12 (hanya baca sampai 40009+40010+40011 saja)
-# dan ubah pressure ke uint16.
+# coba kurangi: MODBUS_HOLDING_COUNT=10 (hanya sampai register CV, tanpa pressure float)
+# atau MODBUS_HOLDING_COUNT=9 (tanpa CV dan pressure).
 REGISTER_COUNT: int = int(os.getenv("MODBUS_HOLDING_COUNT", "14"))
 
 # Float32 byte order dari PLC:

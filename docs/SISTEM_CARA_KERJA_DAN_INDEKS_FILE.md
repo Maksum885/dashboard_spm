@@ -1,4 +1,4 @@
-# Sistem dashboard monitoring testing bay — cara kerja & indeks file
+# Testing Bay Dashboard — Cara Kerja & Indeks File
 
 Dokumen ini menjelaskan **cara kerja internal** (bukan hanya tampilan): alur login, isi sesi, pemanggilan API, data PLC, logout, serta **indeks file** di repositori agar perubahan fitur bisa **dicek silang** (cari rute → controller → service/model → view/JS).
 
@@ -14,26 +14,27 @@ flowchart TB
     Blade[Blade + Vite JS]
     SS[sessionStorage token]
   end
-  subgraph laravel [Laravel]
+  subgraph laravel [Laravel — Server PC]
     WebR[routes/web.php]
     ApiR[routes/api.php]
     MW[Middleware: auth, role, room.access]
     Ctrl[Controllers]
     Svc[Services: PlcDataService, AlarmService, ActivityLogService]
-    DB[(Database)]
+    DB[(SQL Server)]
     Cache[(Cache: plc_snapshot_*)]
     BC[Broadcast: PlcRoomUpdated]
   end
-  subgraph bridge [python-modbus]
+  subgraph bridge [python-modbus — Server PC]
     FA[FastAPI]
     POL[poller + Modbus client]
   end
-  subgraph cv [camera]
+  subgraph jetson [camera — Jetson Nano P3450]
     FL[Flask camera_stream]
     YOLO[YOLO detector]
+    PLCw[plc_writer — FC6]
   end
-  PLC[PLC Modbus TCP]
-  RTSP[RTSP IP cameras]
+  PLC[PLC Schneider M221 — 192.168.1.4:502]
+  RTSP[Hikvision RTSP — 192.168.1.64]
 
   Blade --> WebR
   Blade --> ApiR
@@ -48,6 +49,8 @@ flowchart TB
   FL -->|GET bridge-cameras| ApiR
   FL --> RTSP
   FL --> YOLO
+  YOLO --> PLCw
+  PLCw -->|FC6 Holding Reg 10| PLC
   Blade -->|VITE_CV_BASE_URL stream/alarm| FL
 ```
 
@@ -57,12 +60,12 @@ flowchart TB
 
 ### 2.1 Urutan proses
 
-1. Pengguna tamu membuka rute `GET /login` → `App\Http\Controllers\Web\Guest\AuthController::showLoginForm` → view `resources/views/guest/login.blade.php` (layout `resources/views/guest/layout.blade.php`).
+1. Pengguna tamu membuka rute `GET /login` → `App\Http\Controllers\Web\Guest\AuthController::showLoginForm` → view `resources/views/guest/login.blade.php`.
 2. Form `POST /login` → `AuthController::login` memvalidasi email/password, mencari `User` aktif, memverifikasi hash password.
-3. **Sanctum:** semua token personal user lama dihapus (`$user->tokens()->delete()`), lalu dibuat token baru `createToken('web-login')` — plain text token disimpan sementara.
-4. **Sesi web:** `Auth::login($user, remember)` + `$request->session()->put('api_token', $token)` menyimpan token di **session server** (driver sesi dari `.env`, tabel `sessions` jika `SESSION_DRIVER=database`).
+3. **Sanctum:** semua token personal user lama dihapus, lalu dibuat token baru `createToken('web-login')`.
+4. **Sesi web:** `Auth::login($user, remember)` + `$request->session()->put('api_token', $token)`.
 5. Redirect `GET /` → `Web\DashboardController@index` → view `resources/views/shared/dashboard.blade.php`.
-6. **Browser:** jika Blade punya `@if(session('api_token'))`, skrip inline menulis token ke `**sessionStorage`\*_ kunci `spm_auth_token` (`resources/views/shared/dashboard.blade.php`). Ini dipakai `resources/js/services/authService.js` untuk header `Authorization: Bearer …` pada `fetch` ke `/api/_`.
+6. **Browser:** skrip inline menulis token ke `sessionStorage` kunci `spm_auth_token`. Ini dipakai `resources/js/services/authService.js` untuk header `Authorization: Bearer …` pada `fetch` ke `/api/*`.
 
 ### 2.2 Diagram urutan (login web)
 
@@ -80,7 +83,7 @@ sequenceDiagram
   B->>L: POST /login
   L->>DB: Cek users, password
   L->>DB: Hapus personal_access_tokens lama
-  L->>DB: Buat token web-login + session + remember cookie
+  L->>DB: Buat token web-login + session
   L-->>B: Redirect 302 ke /
   B->>L: GET /
   L-->>B: HTML dashboard + injeksi sessionStorage token
@@ -90,22 +93,22 @@ sequenceDiagram
 
 ### 2.3 File yang terlibat (login web)
 
-| File                                                              | Peran                                                                                                         |
-| ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| `routes/web.php`                                                  | Grup `guest`: `login` GET/POST; setelah auth redirect ke `dashboard` (`bootstrap/app.php`: `redirectUsersTo`) |
-| `bootstrap/app.php`                                               | `redirectGuestsTo` → `login`; alias middleware `role`, `room.access`                                          |
-| `app/Http/Controllers/Web/Guest/AuthController.php`               | Validasi, `Auth::login`, token Sanctum, `session('api_token')`                                                |
-| `app/Models/User.php`                                             | `HasApiTokens`, relasi, `canAccessTestingRoomId`, `isAdmin`                                                   |
-| `resources/views/guest/login.blade.php`                           | Form login                                                                                                    |
-| `resources/views/guest/layout.blade.php`                          | Shell halaman tamu                                                                                            |
-| `database/migrations/..._create_users_table.php`                  | Struktur `users`                                                                                              |
-| `database/migrations/..._create_sessions_table.php`               | Penyimpanan sesi jika driver database                                                                         |
-| `database/migrations/..._create_personal_access_tokens_table.php` | Token Sanctum                                                                                                 |
-| `resources/views/shared/dashboard.blade.php`                      | Setelah login: injeksi `spm_auth_token`, `__SCADA_USER__`                                                     |
-| `resources/js/services/authService.js`                            | Baca token, `apiFetch` / `apiJson`, hapus token & redirect ke `/login` jika 401                               |
-| `config/auth.php`, `config/sanctum.php`                           | Guard, penyediaan token (sesuaikan jika ubah auth)                                                            |
+| File                                                              | Peran                                                       |
+| ----------------------------------------------------------------- | ----------------------------------------------------------- |
+| `routes/web.php`                                                  | Grup `guest`: `login` GET/POST; redirect ke `dashboard`     |
+| `bootstrap/app.php`                                               | `redirectGuestsTo` → `login`; alias middleware              |
+| `app/Http/Controllers/Web/Guest/AuthController.php`               | Validasi, `Auth::login`, token Sanctum, `session('api_token')` |
+| `app/Models/User.php`                                             | `HasApiTokens`, relasi, `canAccessTestingRoomId`, `isAdmin` |
+| `resources/views/guest/login.blade.php`                           | Form login                                                  |
+| `resources/views/guest/layout.blade.php`                          | Shell halaman tamu                                          |
+| `database/migrations/..._create_users_table.php`                  | Struktur `users`                                            |
+| `database/migrations/..._create_sessions_table.php`               | Penyimpanan sesi jika driver database                       |
+| `database/migrations/..._create_personal_access_tokens_table.php` | Token Sanctum                                               |
+| `resources/views/shared/dashboard.blade.php`                      | Setelah login: injeksi token, `__SCADA_USER__`              |
+| `resources/js/services/authService.js`                            | Baca token, `apiFetch` / `apiJson`, redirect ke `/login` jika 401 |
+| `config/auth.php`                                                 | Guard, penyediaan token                                     |
 
-**Catatan:** `app/Http/Requests/LoginRequest.php` ada di repo tetapi **tidak dipakai** oleh `Web\Guest\AuthController` (validasi inline `Request::validate`). Jika ingin satu sumber aturan validasi login web, bisa dihubungkan nanti.
+**Catatan:** `app/Http/Requests/LoginRequest.php` ada di repo tetapi **tidak dipakai** oleh `Web\Guest\AuthController` (validasi inline). Bisa dihubungkan nanti jika ingin satu sumber aturan validasi.
 
 ---
 
@@ -115,40 +118,37 @@ sequenceDiagram
 
 1. `GET /` memuat Blade dashboard + Vite entry `resources/js/app.js`.
 2. `app.js` memanggil `initDashboard()` dari `resources/js/dashboard/init.js`.
-3. `getDashboardData()` (`resources/js/services/dashboardData.js`) memanggil `**GET /api/dashboard`\*\* dengan Bearer token (kecuali mode dummy `VITE_DASHBOARD_USE_DUMMY=true` → data dari `resources/js/data/dummy.js`).
-4. **Backend:** `routes/api.php` → middleware `auth:sanctum` → `App\Http\Controllers\Api\DashboardController` → `App\Services\PlcDataService::buildDashboardPayload($user)`.
-5. `PlcDataService` membaca model `ControlRoom` / `TestingRoom` / `PlcDevice`, cache `plc_snapshot_{id}`, `AlarmLog`, log register untuk membentuk JSON `controlRooms` + `utilities` sesuai hak user (admin vs operator per-ruang vs operator/viewer per control room — lihat kode service).
+3. `getDashboardData()` (`resources/js/services/dashboardData.js`) memanggil `GET /api/dashboard` dengan Bearer token (kecuali mode dummy → data dari `resources/js/data/dummy.js`).
+4. **Backend:** `routes/api.php` → `auth:sanctum` → `Api\DashboardController` → `PlcDataService::buildDashboardPayload($user)`.
+5. `PlcDataService` membaca `ControlRoom` / `TestingRoom` / `PlcDevice`, cache `plc_snapshot_{id}`, `AlarmLog`, log register → JSON `controlRooms + utilities` sesuai hak user.
 
-### 3.2 Loop “hidup” di browser
+### 3.2 Loop "hidup" di browser
 
-`Main.startLiveLoop()` (`resources/js/dashboard/main.js`) menjalankan interval (`pollIntervalGlobalMs()`):
-
-- Memanggil lagi `getDashboardData()` → menyegarkan `store.data`, membangun ulang sidebar alarm, utilitas.
-- Jika panel ruang terbuka: `GET /api/plc/{room_id}/data` → `applySnapshotToRoom` / sinkron status poll (lihat komentar di `main.js`).
+`Main.startLiveLoop()` menjalankan interval (`pollIntervalGlobalMs()`):
+- Memanggil `getDashboardData()` → menyegarkan sidebar alarm, utilitas.
+- Jika panel ruang terbuka: `GET /api/plc/{room_id}/data` → `applySnapshotToRoom`.
 
 ### 3.3 Peta 3D & interaksi
 
-- `resources/js/three/scene.js` — adegan Three.js, label klik memanggil `openPanel` / `openRoomPanel` dari `main.js`.
+- `resources/js/three/scene.js` — adegan Three.js, label klik memanggil `openPanel` / `openRoomPanel`.
 - `resources/js/dashboard/state.js` — `store`, `ui`, pemetaan `ROOM_TO_CR`.
 
 ### 3.4 Realtime (opsional)
 
-- Jika Echo + Pusher/Reverb dikonfigurasi (`VITE_PUSHER_*`, `BROADCAST_CONNECTION`), `bindPlcEchoForRoom` di `main.js` mendengarkan channel `plc.room.{roomId}`, event `PlcRoomUpdated` dari `App\Events\PlcRoomUpdated` (dipicu dari `Api\PlcController` setelah webhook).
+Jika Echo + Pusher/Reverb dikonfigurasi, `bindPlcEchoForRoom` di `main.js` mendengarkan `plc.room.{roomId}` → event `PlcRoomUpdated` dari `App\Events\PlcRoomUpdated`.
 
 ### 3.5 Kamera & Computer Vision
 
 **Live (`VITE_CV_ENABLED=true`):**
 
-1. `PlcDataService` menyertakan array `cameras[]` per ruang (`slot`, `name`, `enabled`) dari tabel `room_cameras`.
-2. `main.js` merender `<img src="{VITE_CV_BASE_URL}/stream/{api_room_id}/{slot}">` untuk slot yang enabled.
-3. `initCvMonitoring()` mem-poll `GET {VITE_CV_BASE_URL}/alarm_status` setiap 1 detik; hasil digabung ke sidebar lewat `getCvHumanAlerts()`.
-4. Python `camera/camera_loader.py` memuat RTSP enabled dari `GET /api/cv/bridge-cameras?token=` (token = `PLC_BRIDGE_TOKEN`).
-5. Settings web: `Web\Operator\CameraConnectionController` → `/settings/cameras`.
+1. `PlcDataService` menyertakan array `cameras[]` per ruang dari `room_cameras`.
+2. `main.js` merender `<img src="{VITE_CV_BASE_URL}/stream/{api_room_id}/{slot}">`.
+3. `initCvMonitoring()` mem-poll `GET {VITE_CV_BASE_URL}/alarm_status` setiap 1 detik.
+4. Jetson memuat RTSP dari `GET /api/cv/bridge-cameras?token=` (token = `PLC_BRIDGE_TOKEN`).
+5. Jika orang terdeteksi: Jetson menulis `1` ke **Holding Register 10** (address 40010 = PDU 9 = `%MW9`) via Modbus TCP FC6. python-modbus membaca register ini, webhook dikirim ke Laravel → `AlarmLog CV_PERSON_DETECTED`.
 
 **Dummy (`VITE_DASHBOARD_USE_DUMMY=true`):**
-
-- `dashboardData.js` mengisi `cameras[]` dan `api_room_id` pada data `dummy.js`.
-- Feed placeholder **DEMO** di panel kamera; contoh alarm human di **Test Cell 1 / Kamera 1**.
+- Feed placeholder DEMO; contoh alarm human di Test Cell 1 / Kamera 1.
 - Panel admin **Demo CV** (`demoCvControls.js`): Human ON/OFF per room/slot.
 - Panel **Demo roof** (`demoRoofControls.js`) tetap terpisah.
 
@@ -175,22 +175,18 @@ sequenceDiagram
 
 ## 4. Logout web
 
-1. Form `POST /logout` (`partials/profile-menu.blade.php`) dengan `@csrf` + opsional `sessionStorage.removeItem('spm_auth_token')` di `onsubmit`.
+1. Form `POST /logout` (`partials/profile-menu.blade.php`) dengan `@csrf`.
 2. `Web\Guest\AuthController::logout` — hapus semua token Sanctum user, `Auth::logout()`, `session()->invalidate()`, `regenerateToken()`, redirect `GET /login`.
-
-**File:** `routes/web.php`, `AuthController.php`, `profile-menu.blade.php`, `authService.js` (token klien ikut dibersihkan dari submit form).
 
 ---
 
-## 5. Login & logout API (klien non-browser / integrasi)
+## 5. Login & logout API (klien non-browser)
 
-| Aksi   | Rute               | Controller                  | Catatan                                                           |
-| ------ | ------------------ | --------------------------- | ----------------------------------------------------------------- |
-| Login  | `POST /api/login`  | `Api\AuthController@login`  | Token nama `auth-token`; mengembalikan `user`, `accessible_rooms` |
-| Logout | `POST /api/logout` | `Api\AuthController@logout` | `auth:sanctum`; menghapus **current** token saja                  |
-| Profil | `GET /api/me`      | `Api\AuthController@me`     | Data user + ruang yang boleh diakses                              |
-
-Tidak memakai session web; hanya header `Authorization: Bearer`.
+| Aksi   | Rute               | Controller                  | Catatan                                          |
+| ------ | ------------------ | --------------------------- | ------------------------------------------------ |
+| Login  | `POST /api/login`  | `Api\AuthController@login`  | Token nama `auth-token`; mengembalikan user info |
+| Logout | `POST /api/logout` | `Api\AuthController@logout` | `auth:sanctum`; menghapus current token saja     |
+| Profil | `GET /api/me`      | `Api\AuthController@me`     | Data user + ruang yang boleh diakses             |
 
 ---
 
@@ -218,25 +214,21 @@ sequenceDiagram
   API->>C: baca cache sama
 ```
 
-**File utama:** `app/Http/Controllers/Api/PlcController.php` (webhook, bridge-devices, getRoomData, getRoomLogs, getAllRoomsData), `app/Services/PlcDataService.php`, `app/Events/PlcRoomUpdated.php`, `python-modbus/main.py`, `python-modbus/modbus/poller.py`, `python-modbus/modbus/device_loader.py`, `python-modbus/modbus/register_map.py`, `python-modbus/modbus/client.py`.
+**File utama:** `app/Http/Controllers/Api/PlcController.php`, `app/Services/PlcDataService.php`, `app/Events/PlcRoomUpdated.php`, `python-modbus/main.py`, `python-modbus/modbus/poller.py`, `python-modbus/modbus/device_loader.py`, `python-modbus/modbus/register_map.py`, `python-modbus/modbus/client.py`.
 
 ---
 
 ## 7. Middleware & akses
 
-| Alias                   | Kelas                                      | Fungsi                                                                                     |
-| ----------------------- | ------------------------------------------ | ------------------------------------------------------------------------------------------ |
-| `auth` / `auth:sanctum` | Laravel                                    | Web: sesi; API: Bearer token                                                               |
-| `role`                  | `App\Http\Middleware\RoleMiddleware`       | Membatasi aksi ke daftar peran (`admin`, `operator`, …)                                    |
-| `room.access`           | `App\Http\Middleware\RoomAccessMiddleware` | Memastikan `room_id` di rute boleh diakses user non-admin (`User::canAccessTestingRoomId`) |
-
-Daftar rute yang memakai middleware: `**routes/api.php`**, `**routes/web.php\*\*`(grup`role:admin`).
+| Alias                   | Kelas                                      | Fungsi                                                                 |
+| ----------------------- | ------------------------------------------ | ---------------------------------------------------------------------- |
+| `auth` / `auth:sanctum` | Laravel                                    | Web: sesi; API: Bearer token                                           |
+| `role`                  | `App\Http\Middleware\RoleMiddleware`       | Membatasi aksi ke daftar peran (`admin`, `operator`, …)                |
+| `room.access`           | `App\Http\Middleware\RoomAccessMiddleware` | Memastikan `room_id` boleh diakses user non-admin                      |
 
 ---
 
 ## 8. ERD data (inti operasional)
-
-Relasi mengikuti migrasi di `database/migrations/`. Tabel utilitas Laravel (`jobs`, `cache`, `sessions`, `password_reset_tokens` jika ada) tidak digambar detail di sini.
 
 ```mermaid
 erDiagram
@@ -259,7 +251,6 @@ erDiagram
     bigint id PK
     string name
     string code UK
-    string description
     boolean is_active
   }
   testing_rooms {
@@ -292,7 +283,6 @@ erDiagram
   users {
     bigint id PK
     string email UK
-    string password
     enum role
     bigint control_room_id FK
     bigint testing_room_id FK
@@ -321,8 +311,6 @@ erDiagram
 
 ## 9. Indeks file aplikasi (`app/`)
 
-Semua file PHP di bawah `app/` pada snapshot proyek ini:
-
 | Path                                                           | Peran                                           |
 | -------------------------------------------------------------- | ----------------------------------------------- |
 | `Providers/AppServiceProvider.php`                             | Service provider utama                          |
@@ -332,7 +320,7 @@ Semua file PHP di bawah `app/` pada snapshot proyek ini:
 | `Models/TestingRoom.php`                                       | Ruang uji pit/cell                              |
 | `Models/PlcDevice.php`                                         | Satu PLC per ruang uji                          |
 | `Models/RoomCamera.php`                                        | RTSP per slot kamera (1–2) per ruang uji        |
-| `Models/AlarmLog.php`                                          | Catatan alarm                                   |
+| `Models/AlarmLog.php`                                          | Catatan alarm (termasuk CV_PERSON_DETECTED)      |
 | `Models/PlcRegisterLog.php`                                    | Log perubahan register                          |
 | `Models/PlcSnapshot.php`                                       | Riwayat snapshot (persisten)                    |
 | `Services/PlcDataService.php`                                  | Bentuk payload dashboard & normalisasi data PLC |
@@ -351,8 +339,8 @@ Semua file PHP di bawah `app/` pada snapshot proyek ini:
 | `Http/Controllers/Api/AuthController.php`                      | Login/logout/me API                             |
 | `Http/Controllers/Api/DashboardController.php`                 | `GET /api/dashboard`                            |
 | `Http/Controllers/Api/RoomController.php`                      | Daftar/detail ruang API                         |
-| `Http/Controllers/Api/PlcController.php`                       | Webhook, bridge, data, log PLC                  |
-| `Http/Controllers/Api/CvController.php`                        | `GET /api/cv/bridge-cameras` untuk Python CV    |
+| `Http/Controllers/Api/PlcController.php`                       | Webhook, bridge, data, log PLC + alarm 40010    |
+| `Http/Controllers/Api/CvController.php`                        | `GET /api/cv/bridge-cameras` untuk Jetson CV    |
 | `Http/Controllers/Api/AlarmController.php`                     | Daftar alarm, ack, resolve                      |
 | `Http/Controllers/Api/ActivityLogController.php`               | Log aktivitas API                               |
 | `Http/Controllers/Api/Admin/UserController.php`                | CRUD user via API (admin)                       |
@@ -362,13 +350,13 @@ Semua file PHP di bawah `app/` pada snapshot proyek ini:
 
 ## 10. Rute & konfigurasi
 
-| File                    | Isi                                                                                                                 |
-| ----------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| `routes/web.php`        | Web: login, logout, dashboard, password akun, settings PLC, grup `/admin/`\*                                        |
-| `routes/api.php`        | API publik: login, webhook, bridge-devices, bridge-cameras; grup Sanctum: dashboard, rooms, plc, alarms; grup admin |
-| `routes/console.php`    | Perintah Artisan terjadwal (jika ada)                                                                               |
-| `bootstrap/app.php`     | Routing, alias middleware, redirect guest/user                                                                      |
-| `.env` / `.env.example` | Semua variabel lingkungan; komentar di `.env.example` menjelaskan PLC bridge & Vite                                 |
+| File                    | Isi                                                               |
+| ----------------------- | ----------------------------------------------------------------- |
+| `routes/web.php`        | Web: login, logout, dashboard, password, settings PLC/kamera, admin |
+| `routes/api.php`        | API: login, webhook, bridge-devices, bridge-cameras; Sanctum: dashboard, plc, alarms; admin |
+| `routes/console.php`    | Perintah Artisan terjadwal                                        |
+| `bootstrap/app.php`     | Routing, alias middleware, redirect guest/user                    |
+| `.env` / `.env.example` | Semua variabel lingkungan                                         |
 
 ---
 
@@ -376,9 +364,11 @@ Semua file PHP di bawah `app/` pada snapshot proyek ini:
 
 | Lokasi                                                  | Isi                                                                         |
 | ------------------------------------------------------- | --------------------------------------------------------------------------- |
-| `database/migrations/*.php`                             | Skema tabel (lihat juga komentar di dalam file migrasi)                     |
+| `database/migrations/*.php`                             | Skema tabel                                                                 |
 | `database/seeders/DatabaseSeeder.php`                   | Data awal control room, testing room, plc_devices, room_cameras, users demo |
 | `database/migrations/..._create_room_cameras_table.php` | Tabel kamera per ruang (2 slot)                                             |
+
+Database: **SQL Server** (`DB_CONNECTION=sqlsrv`).
 
 ---
 
@@ -400,46 +390,49 @@ Semua file PHP di bawah `app/` pada snapshot proyek ini:
 | `resources/js/services/*`                              | Auth & data API                       |
 | `resources/js/three/scene.js`                          | Peta 3D                               |
 | `resources/js/data/dummy.js`                           | Data statis UI (hanya jika env dummy) |
-| `resources/css/dashboard.css`                          | Gaya besar                            |
+| `resources/css/dashboard.css`                          | Gaya dashboard + settings             |
 
 ---
 
 ## 13. Service `python-modbus/`
 
-| File / area               | Peran                                       |
-| ------------------------- | ------------------------------------------- |
-| `main.py`                 | Entry FastAPI                               |
-| `config.py`               | Konfigurasi perangkat fallback              |
-| `modbus/device_loader.py` | Muat daftar device dari Laravel atau config |
-| `modbus/poller.py`        | Siklus polling                              |
-| `modbus/client.py`        | Modbus TCP                                  |
-| `modbus/register_map.py`  | Peta register 40001–40012                   |
+| File / area               | Peran                                         |
+| ------------------------- | --------------------------------------------- |
+| `main.py`                 | Entry FastAPI                                 |
+| `config.py`               | Konfigurasi perangkat fallback                |
+| `modbus/device_loader.py` | Muat daftar device dari Laravel atau config   |
+| `modbus/poller.py`        | Siklus polling                                |
+| `modbus/client.py`        | Modbus TCP (pymodbus 3.x)                     |
+| `modbus/register_map.py`  | Peta register 40001–40012 + 40010 CV (14 word) |
 
 ---
 
-## 14. Service `camera/` (CV)
+## 14. Service `camera/` (CV — Jetson Nano)
 
-| File                | Peran                                                            |
-| ------------------- | ---------------------------------------------------------------- |
-| `camera_stream.py`  | Entry Flask: `/stream/{room}/{slot}`, `/alarm_status`, `/health` |
-| `config.py`         | Env: host, port, refresh interval, path model YOLO               |
-| `camera_loader.py`  | Muat kamera enabled dari Laravel bridge API                      |
-| `camera_manager.py` | Worker thread per room+slot, reconnect RTSP                      |
-| `yolo_detector.py`  | Deteksi class person (YOLOv8n)                                   |
-| `models/yolov8n.pt` | Model weights                                                    |
-| `.env.example`      | Template konfigurasi Python CV                                   |
+| File                | Peran                                                                        |
+| ------------------- | ---------------------------------------------------------------------------- |
+| `camera_stream.py`  | Entry Flask: `/stream/{room}/{slot}`, `/alarm_status`, `/health`             |
+| `config.py`         | Env: host, port 5001, YOLO params, GStreamer mode, PLC write config          |
+| `camera_loader.py`  | Muat kamera enabled dari Laravel bridge API                                  |
+| `camera_manager.py` | Worker thread per room+slot, GStreamer pipeline (`avdec_h264`), reconnect    |
+| `yolo_detector.py`  | Deteksi class person (YOLOv8n), GPU inference via `cuda:0`                  |
+| `plc_writer.py`     | Tulis 0/1 ke Holding Register 10 PLC via Modbus TCP FC6 (pymodbus 2.5.3)   |
+| `.env.example`      | Template konfigurasi Python CV                                               |
+
+**Register PLC yang ditulis Jetson:** address 40010 = PDU 9 = `%MW9` = "Holding Register 10" di Schneider M221. Nilai `1` saat orang terdeteksi, `0` saat tidak ada orang.
 
 ---
 
 ## 15. Dokumen lain di repo
 
-| File                                   | Fokus                                        |
-| -------------------------------------- | -------------------------------------------- |
-| `README.md`                            | Quick start & struktur proyek (GitHub-style) |
-| `docs/GAMBARAN_SISTEM.md`              | Gambaran produk & fitur (Bahasa Indonesia)   |
-| `docs/PANDUAN_MENJALANKAN_SISTEM.md`   | Instalasi & operasional                      |
-| `docs/PENJELASAN_CARA_KERJA_SISTEM.md` | Alur pengguna & rantai kode                  |
-| `ROADMAP-SCADA.md`                     | Rencana penyempurnaan                        |
+| File                                    | Fokus                                        |
+| --------------------------------------- | -------------------------------------------- |
+| `README.md`                             | Quick start & struktur proyek                |
+| `docs/GAMBARAN_SISTEM.md`               | Gambaran produk & fitur                      |
+| `docs/PANDUAN_MENJALANKAN_SISTEM.md`    | Instalasi & operasional                      |
+| `docs/PENJELASAN_CARA_KERJA_SISTEM.md`  | Alur pengguna & rantai kode                  |
+| `camera/PANDUAN_CV.md`                  | Panduan lengkap CV service & sintaks Jetson  |
+| `ROADMAP.md`                            | Rencana penyempurnaan                        |
 
 ---
 
@@ -449,7 +442,7 @@ Semua file PHP di bawah `app/` pada snapshot proyek ini:
 2. **Ubah payload dashboard** → `PlcDataService` + `dashboardData.js` + `main.js`.
 3. **Ubah akses ruang** → `User::canAccessTestingRoomId` + `RoomAccessMiddleware`.
 4. **Ubah PLC** → `PlcController` + `python-modbus` + `PlcRoomUpdated`.
-5. **Ubah kamera/CV** → `RoomCamera` + `CvController` + `camera/` + `main.js` (`initCvMonitoring`, `demoCvControls.js`).
+5. **Ubah kamera/CV** → `RoomCamera` + `CvController` + `camera/` (Jetson) + `main.js`.
 6. **Ubah skema DB** → migrasi + model + service/controller terkait.
 
 ---

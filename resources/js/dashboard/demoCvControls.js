@@ -45,8 +45,8 @@ export function initDemoCvControls(main) {
       <select id="dash-demo-cv-room" class="dash-demo-panel__select"></select>
       <label class="dash-demo-panel__label" for="dash-demo-cv-slot">Camera</label>
       <select id="dash-demo-cv-slot" class="dash-demo-panel__select">
-        <option value="1">Kamera 1</option>
-        <option value="2">Kamera 2</option>
+        <option value="1">Camera 1</option>
+        <option value="2">Camera 2</option>
       </select>
       <div class="dash-demo-panel__actions">
         <button type="button" class="dash-demo-panel__btn dash-demo-panel__btn--alert" data-detect="1">Human ON</button>

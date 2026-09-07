@@ -47,7 +47,7 @@
       <div class="admin-field">
         <label for="role">Role</label>
         <select id="role" name="role" required>
-          @foreach (['admin' => 'Admin', 'operator' => 'Operator', 'viewer' => 'Viewer'] as $val => $label)
+          @foreach (['admin' => 'Admin', 'operator' => 'Operator'] as $val => $label)
             <option value="{{ $val }}" @selected(old('role', $user->role ?? 'operator') === $val)>{{ $label }}</option>
           @endforeach
         </select>

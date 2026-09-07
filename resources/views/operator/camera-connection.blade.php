@@ -25,7 +25,7 @@
   <div class="admin-page-head admin-page-head--stack">
     <div>
       <h1 class="settings-page-title">Camera settings</h1>
-      <p class="settings-page-lead">Configure RTSP cameras per test room. The CV service reads enabled entries from the server.</p>
+      <p class="settings-page-lead">Configure the live stream URL per camera slot. Enable a slot to show its feed on the dashboard.</p>
     </div>
     <div class="admin-page-head-actions">
       <a href="{{ route('dashboard') }}" class="admin-btn admin-btn--ghost">
@@ -35,7 +35,7 @@
   </div>
 
   <section class="settings-section" aria-labelledby="camera-heading">
-    <h2 id="camera-heading" class="settings-section-title"><i class="ti ti-video" aria-hidden="true"></i> RTSP cameras</h2>
+    <h2 id="camera-heading" class="settings-section-title"><i class="ti ti-video" aria-hidden="true"></i> Camera configuration</h2>
 
     @if (session('status'))
       <div class="settings-flash" role="status">{{ session('status') }}</div>
@@ -55,7 +55,7 @@
             <i class="ti {{ $meta['icon'] }}" aria-hidden="true"></i> {{ $meta['label'] }}
             <span class="settings-group-count">{{ $group->count() }}</span>
           </h3>
-          <div class="settings-cards-grid">
+          <div class="settings-cards-grid settings-cards-grid--cam">
             @foreach ($group as $room)
               @include('operator.partials.camera-room-card', ['room' => $room, 'highlightRoomId' => $highlightRoomId])
             @endforeach
